@@ -33,7 +33,7 @@ is needed and a launcher that reaches the cluster software ends at once, with th
 
 **Choices this file pins:**
 
-- The ``[cloud]`` extra (and its ``[burla]`` alias, RB-4) pins exactly the client the backend
+- The ``[cloud]`` extra (its ``[burla]`` alias of RB-4 went in 0.5.0) pins exactly the client the backend
   runs, ``burla==1.8.4``: the extra admits a version exactly when the backend runs it. Under the
   alternative, a floor, the 1.8.5 and 1.9.0 cases flip.
 - A ``burla`` that Prove's interpreter cannot import is refused before the plan, as a missing
@@ -59,8 +59,7 @@ is needed and a launcher that reaches the cluster software ends at once, with th
 ``init`` (a cloud sweep with no spec argument on Windows meets the same first check, pinned here
 with a spec named, a missing one included); PF7's measured floors and its
 ``all`` extra (this file pins only that ``all`` carries the ``modal`` and ``burla`` requirements
-their own extras carry, and that no extra but ``cloud``, its ``burla`` alias and ``all`` names
-``burla``).
+their own extras carry, and that no extra but ``cloud`` and ``all`` names ``burla``).
 """
 
 from __future__ import annotations
@@ -340,8 +339,8 @@ def test_pf9_2_the_cloud_extra_admits_exactly_the_client_the_backend_runs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud: CloudWorld, version: str, runs: bool,
 ) -> None:
     """The exact pin: ``[cloud]`` declares one ``burla``
-    requirement, its ``[burla]`` alias and ``all`` carry the same, no other extra names ``burla``
-    (RB-3, RB-4), and it admits a version exactly when the backend runs that client. A client the
+    requirement, ``all`` carries the same, no other extra names ``burla`` and none is named
+    ``burla`` (RB-3; First run X1), and it admits a version exactly when the backend runs that client. A client the
     backend refuses is refused before the cluster software is called, naming the client's version,
     the pin and the install line. (The pinned client running is every test of
     ``test_bu_cloud_backend.py``.)"""
@@ -351,8 +350,8 @@ def test_pf9_2_the_cloud_extra_admits_exactly_the_client_the_backend_runs(
     declared = extras()
     pinned = [str(r) for r in named(declared["cloud"], "burla")]
     assert [str(r) for r in named(declared["all"], "burla")] == pinned
-    assert [str(r) for r in named(declared["burla"], "burla")] == pinned
-    assert {name for name, reqs in declared.items() if named(reqs, "burla")} == {"cloud", "burla", "all"}
+    assert {name for name, reqs in declared.items() if named(reqs, "burla")} == {"cloud", "all"}
+    assert "burla" not in declared, sorted(declared)
     if runs:
         return
     make_findable(monkeypatch, tmp_path, "burla", version)

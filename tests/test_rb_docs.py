@@ -31,9 +31,10 @@ has it. The pages themselves are also read by the docs check and the link check 
 - The data-flow section is a ``###`` heading under ``## Your cloud account``, since the section
   that names who carries the reader's code belongs with the backend it is true of, and the
   backends page's own frozen test reads that section for it.
-- The scan allows the three things a reader of 0.2 typed (``[burla]``, ``--backend burla``, the
-  ``poisson-prove[burla]`` extra) wherever a page says they moved, and nothing else outside the
-  data-flow section and the artifact format's two fields.
+- The scan allows the two things a reader of 0.2 typed that Prove still answers (``[burla]``,
+  ``--backend burla``) wherever a page says they moved, and nothing else outside the data-flow
+  section and the artifact format's two fields. Until 0.5.0 it allowed a third, the
+  ``poisson-prove[burla]`` extra; that extra is gone (First run X4), so no page names it.
 - ``CONTRIBUTING.md`` is not scanned: it is for the people who build Prove, who meet the software
   by name in ``pyproject.toml`` and the fakes.
 - The CHANGELOG's 0.3.0 entry is written in this pair under ``## 0.3.0 — Unreleased``; the release
@@ -518,8 +519,9 @@ def test_d2_the_scan_of_claims_is_not_blind() -> None:
 
 NAME = re.compile(r"(?i)burla")
 #: What a reader of 0.2 typed, which a page that says it moved must be able to repeat (§2.6:
-#: the refusals "repeat what the reader typed", and the old extra's alias).
-TYPED = re.compile(r'\[burla\]|--backend burla\b|poisson-prove\[burla\]')
+#: the refusals "repeat what the reader typed"). The old extra's name, ``poisson-prove[burla]``,
+#: is not among them since 0.5.0 removed the extra.
+TYPED = re.compile(r'(?<!poisson-prove)\[burla\]|--backend burla\b')
 
 
 def allowed(rel: str, line: str, in_data_flow: bool) -> str | None:
@@ -573,7 +575,7 @@ def test_d3_the_scan_reads_the_pages_and_finds_the_disclosure() -> None:
     ("`--backend burla` runs them on your own Burla cluster.", False),
     ("A 0.2 spec's `[burla]` table is refused, naming the move to `[cloud]`.", True),
     ("`--backend burla` is refused with the new name.", True),
-    ('`pip install "poisson-prove[burla]"` installs the same until 0.4.0.', True),
+    ('`pip install "poisson-prove[burla]"` installs the same until 0.4.0.', False),
     ("A Modal container or a Burla worker runs your rollout's BLAS on one thread.", False),
     ("The cluster software is pinned (`burla==1.8.4`).", False),
     ("go through burla's relay", False),
@@ -596,7 +598,7 @@ def test_every_page_that_gives_botocore_a_version_gives_the_floor_pyproject_has(
     extras = tomllib.loads(text_of("pyproject.toml"))["project"]["optional-dependencies"]
     (floor,) = [r for r in extras["cloud"] if r.startswith("botocore")]
     assert floor == "botocore[crt]>=1.42.39", floor
-    assert [r for r in extras["burla"] if r.startswith("botocore")] == [floor] and floor in extras["all"]
+    assert floor in extras["all"] and "burla" not in extras, extras
     wrong = []
     named = 0
     for rel in [*pages(), "CONTRIBUTING.md"]:

@@ -99,7 +99,8 @@ DESCRIPTION = (
 )
 PEOPLE = [{"name": "Poisson Labs", "email": "work@poissonlabs.ai"}]
 PYTHONS = ("3.11", "3.12", "3.13", "3.14")
-EXTRAS = {"modal", "agent", "cloud", "burla", "all", "dev"}
+#: 0.5.0, First run (X1): the old ``burla`` extra, an alias of ``cloud`` since 0.3.0 (RB-4), is gone.
+EXTRAS = {"modal", "agent", "cloud", "all", "dev"}
 MODAL_FLOOR = "modal>=1.0.0"
 BURLA_PIN = "burla==1.8.4"
 #: The lowest botocore that installs beside the pin: burla 1.8.4 requires boto3>=1.42.39.
@@ -215,8 +216,6 @@ EXTRA_CASES = {
     "the set": lambda: set(pyproject()["project"]["optional-dependencies"]) == EXTRAS,
     "modal": lambda: _same(requirements("modal"), [MODAL_FLOOR]),
     "cloud": lambda: _same(requirements("cloud"), CLOUD),
-    # RB-4: the old extra installs exactly what the cloud extra does until 0.4.0.
-    "burla": lambda: _same(requirements("burla"), CLOUD),
     "agent": lambda: _agent_holds(requirements("agent")),
     "all": lambda: _all_holds(requirements("all")),
     "dev": lambda: set(DEV_NEEDS) <= {name_of(r) for r in requirements("dev")},

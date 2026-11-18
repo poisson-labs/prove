@@ -4,6 +4,15 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.5.0 — Unreleased
+
+### Removed
+
+- The `[burla]` install extra. 0.3.0 kept it as another name for `[cloud]` until 0.4.0, and 0.4.0
+  still shipped it; it is gone in 0.5.0. Install with `pip install "poisson-prove[cloud]"`. An
+  install made with `[burla]` now has no cluster software, and the first cloud sweep says to
+  install `[cloud]`.
+
 ## 0.4.0 — 2026-11-16
 
 ### Added
