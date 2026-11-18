@@ -383,13 +383,18 @@ class ProveApp(App[int], Screens):
         except core.Refusal as exc:
             return self._plan_refused(page, exc, overrides)
         lines = self.plan_lines(plan)
+        # The question, and after it the answer's own lines (not run, the progress, a failure),
+        # are the lines below the plan and keep their rows: where the window has no room for the
+        # whole plan, the plan's last lines go behind ``m`` and the question stays on the screen.
+        page.keep_bottom = True
 
         def layout(width: int) -> None:
             if page.top and page.top[0].text.startswith(("  done  ", "  stopped  ")):
                 return
-            page.top = [*lines, BLANK]
+            page.top = list(lines)
+            page.bottom = [BLANK]
             if not self.sweeping:
-                page.top.append(Line(f"  {_QUESTION}", [(2, 2 + len(_QUESTION), "bold")]))
+                page.bottom.append(Line(f"  {_QUESTION}", [(2, 2 + len(_QUESTION), "bold")]))
 
         page.layout = layout
         page.keys = [("y", "run"), ("n", "no"), BACK]
@@ -432,12 +437,15 @@ class ProveApp(App[int], Screens):
         if self.sweeping or page.on_key is None:
             return False
         if ch in ("n", "q", "\x1b", "\r"):
-            page.top = [*lines, BLANK, Line("  not run: nothing was spent", [(2, 28, "dim")])]
+            page.top = list(lines)
+            page.bottom = [BLANK, Line("  not run: nothing was spent", [(2, 28, "dim")])]
             page.layout, page.on_key = None, None
             page.keys = [BACK]
             if ch == "\x1b":  # no, and back to where the sweep was opened from
                 self.pop()
             return True
+        if ch == "m" and page.more:
+            return False  # the plan's lines the window has no room for; the question stays asked
         if ch != "y":
             # a printable key answers nothing; ``?`` is still help
             return ch != "?" and ch.isprintable() and len(ch) == 1
@@ -452,7 +460,8 @@ class ProveApp(App[int], Screens):
         page.keys = [("ctrl-c", "stop and keep what is done")]
         progress = Line("  starting")
         named = Line("")
-        page.top = [*lines, BLANK, progress, named]
+        page.top = list(lines)
+        page.bottom = [BLANK, progress, named]
         page.layout = None
         started = time.monotonic()
 
@@ -563,6 +572,7 @@ class ProveApp(App[int], Screens):
             BLANK,
             *lines[2:],
         ]
+        page.bottom, page.keep_bottom = [], False
         page.keys = [("enter", "open the run"), BACK]
         run_id = str(result.run_id)
 
@@ -580,7 +590,8 @@ class ProveApp(App[int], Screens):
         self._sweep_ended()
         page.message, page.keep_message = f"error: {sentence}", True
         whole = block([Detail("error", sentence)]) if len(page.message) > self.width() else []
-        page.top = [*lines, BLANK, *whole, *block([Detail("next", c, code=True) for c in nexts])]
+        page.top = list(lines)
+        page.bottom = [BLANK, *whole, *block([Detail("next", c, code=True) for c in nexts])]
         page.keys, page.on_key = [BACK], None
         self.redraw()
 
@@ -894,6 +905,9 @@ class ProveApp(App[int], Screens):
         elif page.show_more and page.more:
             more = [x for line in page.more for x in wrap_line(line, w, False)]
             lines = top[:-1] + more
+            # The lines behind ``m`` are shown from their first: where they and the lines kept
+            # above them are more than the window, the kept ones give up their rows from the top.
+            lines = lines[max(0, min(len(top) - 1, len(lines) - body_room)) :]
         else:
             window = max(0, body_room - len(top) - len(header) - len(below))
             mark = not page.in_links and not page.scroll_only

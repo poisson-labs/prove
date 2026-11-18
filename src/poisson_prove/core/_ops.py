@@ -87,6 +87,7 @@ from poisson_prove.executor import (
     RunSummary,
     UnderpoweredDesign,
     _plan_design,
+    _plan_paired,
     _recorded_design,
     check_power,
     preflight,
@@ -131,6 +132,10 @@ METHOD_WORDS = {
     "logrank_bh": ("time to the event", "log-rank"),
 }
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
+#: Why a plan needs no earlier run to size itself, said in the paired line of a first sweep's plan.
+NO_PILOT = (
+    "planned for the worst base rate and with no credit for pairing, so it needs no pilot run"
+)
 MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 SWEEP_NEXT = "sweep SPEC.toml --target pkg.module:rollout"
 LATEST_PARTIAL = "\0latest-partial"
@@ -1100,6 +1105,20 @@ def _with_kind(argv: Sequence[str], event: str, kind: str) -> list[str]:
             words[i] = f"{event}:{kind}"
         elif word == f"--event={event}":
             words[i] = f"--event={event}:{kind}"
+    return words
+
+
+def drop_option(typed: Sequence[str], option: str) -> list[str]:
+    """The words as typed without ``option`` and its value, however it was written."""
+    words: list[str] = []
+    skip = False
+    for at, word in enumerate(typed):
+        if skip:
+            skip = False
+        elif word == option and at + 1 < len(typed):
+            skip = True
+        elif not word.startswith(option + "="):
+            words.append(word)
     return words
 
 
@@ -2524,7 +2543,21 @@ def _planned(
         check_power(p, max_mde=p.max_mde_accepted)
     except UnderpoweredDesign as exc:
         nexts = []
-        if exc.replicates_needed is not None:
+        message = str(exc)
+        if exc.earlier_run is not None:
+            # The earlier run is the short side: more replicates of this sweep would be refused
+            # again, so the first command is a new baseline, typed without --pair-with. The step
+            # after it is said in the sentence: only next: lines follow an error: line.
+            size = str(exc.replicates_needed)
+            message = (
+                f'underpowered design: run "{idx.name_of(exc.earlier_run)}" has '
+                f"{_look.fmt_count(exc.earlier_replicates)} replicates, and a sweep paired with "
+                f"it needs {size} on both sides; sweep a new baseline at {size}, then your "
+                f"change with --pair-with latest --replicates {size}"
+            )
+            baseline = set_option(drop_option(typed, "--pair-with"), "--replicates", size)
+            nexts.append(join([COMMAND, *baseline]))
+        elif exc.replicates_needed is not None:
             nexts.append(
                 join([COMMAND, *set_option(typed, "--replicates", str(exc.replicates_needed))])
             )
@@ -2535,9 +2568,11 @@ def _planned(
                 f"sweep fewer conditions: with {p.spec.replicates} replicates a side at most "
                 f"{_look.fmt_count(exc.most_conditions)} can each be flagged alone"
             )
-        raise refusal(str(exc), nexts, plan=shown) from exc
+        raise refusal(message, nexts, plan=shown) from exc
     design = _plan_design(p)
+    paired = _plan_paired(p)
     design_line = None
+    paired_line = None
     if design.flaggable:
         accepted = DEFAULT_MAX_MDE if p.max_mde_accepted is None else p.max_mde_accepted
         limit = "none detectable" if design.mde is None else _look.fmt_rate(design.mde)
@@ -2547,6 +2582,21 @@ def _planned(
             f"({_facts.test_name(design.test)}, q {design.q:g} over {design.family} tests, "
             f"{_look.times_in(design.power)}; you accept up to {_look.fmt_rate(accepted)})"
         )
+        if paired is not None and paired.flaggable:
+            limit = "none detectable" if paired.mde is None else _look.fmt_rate(paired.mde)
+            paired_line = (
+                f"  and in a sweep paired with this one  "
+                f"{limit} at its worst base rate, {_look.fmt_rate(paired.base_rate)} "
+                f"(paired test on shared seeds, McNemar, q {paired.q:g} over {paired.family} "
+                f"tests, {_look.times_in(paired.power)}; {NO_PILOT})"
+            )
+        elif paired is not None:
+            _notes.append(
+                f"no single condition of this design can be flagged in a sweep paired with this "
+                f"one: the smallest possible p of the paired test is {_look.fmt_p(paired.p_min)}, "
+                f"and a flag needs less than {_look.fmt_p(paired.level)} (q {paired.q:g} over "
+                f"{paired.family} tests); you accepted that with --max-mde 1"
+            )
     else:
         _notes.append(
             f"no single condition of this design can be flagged: the smallest possible p is "
@@ -2554,6 +2604,8 @@ def _planned(
             f"(q {design.q:g} over {design.family} tests); you accepted that with --max-mde 1"
         )
     payload["design_mde"] = design.record()
+    if paired is not None:
+        payload["design_paired"] = paired.record()
     if checked:
         _notes.extend(_setup_notes(spec))
     if backend == "modal":
@@ -2564,7 +2616,7 @@ def _planned(
             raise refusal(
                 str(exc),
                 getattr(exc, "nexts", ()),
-                plan=dataclasses.replace(shown, design_line=design_line),
+                plan=dataclasses.replace(shown, design_line=design_line, paired_line=paired_line),
             ) from exc
     return Plan(
         verdict="plan",
@@ -2573,6 +2625,7 @@ def _planned(
         next=(),
         lines=lines,
         design_line=design_line,
+        paired_line=paired_line,
         inner=p,
         store=store,
         target=target,
