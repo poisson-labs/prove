@@ -131,8 +131,7 @@ aws login
 
 The extra installs the cluster software Prove uses, pinned to exactly one version, and
 `botocore[crt]>=1.42.39`, which a sign-in made by `aws login` needs. The AWS CLI is not a Python
-package: install it yourself, and Prove names it when it is missing. `poisson-prove[burla]`, the
-extra's name in 0.2, installs the same until 0.4.0.
+package: install it yourself, and Prove names it when it is missing.
 
 `poisson-prove where cloud` writes the `[cloud]` table and checks that this machine is ready.
 The plan then names the account (masked to its first and last four digits), the nodes and what
