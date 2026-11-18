@@ -996,11 +996,14 @@ def test_pf3_8_replicates_overrides_the_spec_and_the_power_gate_offers_the_small
     store = cwd / "prove-runs"
     if case == "the override is recorded":
         (cwd / "prove.toml").write_text(SPEC, encoding="utf-8")
-        r = run(cwd, "sweep", "--replicates", "7", "--yes", *LOOSE)
+        # First run M2 (#6, Z1): 8, not 7. A sweep paired with nothing is also read with the paired
+        # test, which over these four tests cannot flag a lone condition at 7 replicates, so no
+        # accepted change under 1 admits 7.
+        r = run(cwd, "sweep", "--replicates", "8", "--yes", *LOOSE)
         assert r.code == 0, r.err
         (entry,) = runs_of(store)
-        assert entry["rows"] == 4 * 7, entry
-        assert manifest_of(store, entry["run_id"])["environment"]["sweep"]["replicates"] == 7
+        assert entry["rows"] == 4 * 8, entry
+        assert manifest_of(store, entry["run_id"])["environment"]["sweep"]["replicates"] == 8
         return
 
     small = SPEC.replace("replicates = 50", "replicates = 5")
