@@ -46,7 +46,9 @@ package.
   files. The sdist holds exactly ``PKG-INFO``, ``pyproject.toml``, ``.gitignore``, ``README.md``,
   ``CHANGELOG.md``, ``CONTRIBUTING.md``, ``LICENSE``, ``NOTICE``, and the tree's files under
   ``src/``, ``tests/``, ``docs/`` and ``examples/``, each folder matched whole: which examples are
-  left is the hygiene module's call, so the sdist follows the tree.
+  left is the hygiene module's call, so the sdist follows the tree. The files ``init`` writes from
+  are named one by one and compared byte for byte: the quickstart spec and, from 0.5.0 (First run
+  M3, D8), the demo agent's five files at ``poisson_prove/demo/``.
 - **k8** The PyPI page is the README: the wheel's long description is ``README.md`` byte for byte,
   as Markdown.
 
@@ -65,7 +67,7 @@ before release (the hygiene tests); the version, set by the release.
 | PF7.4 the extras | ``test_pf7_4_each_extra_carries_what_it_needs`` (one case per extra) |
 | PF7.4 a floor on every dependency (k4) | ``test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_openai_and_burla`` (one case per group) |
 | PF7.5 the code suite passes with every dependency at its floor | ``test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor`` (slow) |
-| PF7.6 the wheel and the sdist hold exactly their sets; the example spec ships | ``test_pf7_6_each_archive_holds_exactly_its_set`` (wheel, sdist) |
+| PF7.6 the wheel and the sdist hold exactly their sets; the example spec and the demo agent's files ship | ``test_pf7_6_each_archive_holds_exactly_its_set`` (wheel, sdist) |
 | PF7.6 the PyPI page is the README | ``test_pf7_6_the_pypi_page_is_the_readme`` |
 """
 
@@ -112,6 +114,9 @@ SDIST_FILES = {"PKG-INFO", "pyproject.toml", ".gitignore", "README.md", "CHANGEL
 SDIST_FOLDERS = ("src", "tests", "docs", "examples")
 DIST_INFO = {"METADATA", "WHEEL", "RECORD", "entry_points.txt", "licenses/LICENSE", "licenses/NOTICE"}
 CODE_SUITE = "not math and not calibration and not slow and not backend"
+#: 0.5.0, First run M3 (D8): the demo agent ``init --demo`` writes, and the two files
+#: ``--with-setup`` adds, ship as package data under the names they are written as.
+DEMO = ("support_bot.py", "prompts.py", "demo.md", "prove_rollout.py", "prove.toml")
 
 
 def pyproject() -> dict:  # type: ignore[type-arg]
@@ -369,6 +374,11 @@ def test_pf7_6_each_archive_holds_exactly_its_set(kind: str, archives: dict[str,
     assert {"missing": sorted(want - names)[:40], "extra": sorted(names - want)[:40]} == {"missing": [], "extra": []}
     spec = "poisson_prove/examples/quickstart.toml" if kind == "wheel" else "src/poisson_prove/examples/quickstart.toml"
     assert archives[kind].files[spec] == (ROOT / "src/poisson_prove/examples/quickstart.toml").read_bytes()
+    # First run M3, D8: the demo's files are in both archives, each the tree's own bytes.
+    for name in DEMO:
+        member = f"poisson_prove/demo/{name}" if kind == "wheel" else f"src/poisson_prove/demo/{name}"
+        assert member in names, f"{member} is not in the {kind}"
+        assert archives[kind].files[member] == (ROOT / "src/poisson_prove/demo" / name).read_bytes(), member
     # The package marks itself typed, and both archives carry the marker.
     assert ("poisson_prove/py.typed" if kind == "wheel" else "src/poisson_prove/py.typed") in names
 

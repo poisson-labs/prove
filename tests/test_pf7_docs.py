@@ -102,7 +102,7 @@ able to show and which the hygiene module's double-bracket family would read as 
 |---|---|
 | PF7.1 the README's first screen: title, commands block exactly, the three facts, the description words | ``test_pf7_1_the_readme_first_screen_has_the_title_the_first_commands_and_the_three_facts`` |
 | PF7.1 every link in the README is absolute | ``test_pf7_1_every_link_in_the_readme_is_absolute_and_resolves`` |
-| PF7.1 the README's sections in order, under 250 lines | ``test_pf7_1_the_readme_has_its_sections_in_order_in_under_250_lines`` |
+| PF7.1 the README's sections in order, under 260 lines (250 until 0.5.0, First run M3) | ``test_pf7_1_the_readme_has_its_sections_in_order_in_under_260_lines`` |
 | PF7.1 every command block of the README is run | ``test_pf7_1_every_block_of_the_readme_is_run`` |
 | PF7.1 the README links the three pages kept | ``test_pf7_1_the_readme_links_the_three_pages_it_keeps`` |
 | PF7.1 each README section carries its facts | ``test_pf7_1_each_readme_section_carries_its_facts`` (one case per section) |
@@ -457,11 +457,13 @@ def test_pf7_1_the_readme_links_the_three_pages_it_keeps() -> None:
     assert [p for p in kept if not _links_to(text_of(README), p)] == []
 
 
-def test_pf7_1_the_readme_has_its_sections_in_order_in_under_250_lines() -> None:
+def test_pf7_1_the_readme_has_its_sections_in_order_in_under_260_lines() -> None:
+    """0.5.0, First run M3 (FRS-14, D7): the limit was 250 and the README stood at 249. The demo and
+    the line that says what the example on a real model needs are ten lines at most."""
     text = text_of(README)
     headings = re.findall(r"^## (.+?)\s*$", text, flags=re.M)
     assert headings == SECTIONS, headings
-    assert len(text.splitlines()) < 250, len(text.splitlines())
+    assert len(text.splitlines()) < 260, len(text.splitlines())
 
 
 def test_pf7_1_every_block_of_the_readme_is_run() -> None:
