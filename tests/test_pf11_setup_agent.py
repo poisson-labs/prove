@@ -40,22 +40,32 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   "Words Prove uses", optional); ``### Prove's own rules`` follows the shared rules directly and
   names ``--dry-run``, ``prove-runs/`` and ``.poisson/``; "What you are doing" is one paragraph;
   "Files you write" is one ``- `path` ...`` line per file, in ``poisson-writes``' order; "Steps" is
-  six numbered items, each opening with its title in bold, the last two titled "Run the check" and
-  "Stop and hand over", step 2 naming ``prove_rollout.py``, step 3 ``prove.toml`` and step 4
-  ``[declare]``, ``failures`` and ``successes``, step 1 showing no command, step 5 naming
-  ``--replicates``, ``next:`` and ``prove.toml``; "Hand over" is the shared opening and then Prove's
-  list of four things to confirm, one each naming the axes, the outcomes, the replicates with their
-  cost, and the wrapper.
+  seven numbered items (First run M4, K7; six before it), each opening with its title in bold, the
+  last three titled "Run the check", "Call it once" and "Hand over", step 2 naming
+  ``prove_rollout.py``, step 3 ``prove.toml`` and step 4 ``[declare]``, ``failures`` and
+  ``successes``, step 1 showing no command, step 5 naming ``--replicates``, ``next:`` and
+  ``prove.toml``; "Hand over" is Prove's own since M4 (its first line, its order and its loop are
+  pinned in ``test_frs_m4_try.py``) and ends with Prove's list of four things to confirm, one each
+  naming the axes, the outcomes, the replicates with their cost, and the wrapper.
 - (i) Commands: every line of a ``bash`` block is a ``poisson-prove`` command (step 1 says "run
   nothing", so the agent runs no other program); "parses" is read as ``<command> --help`` exiting 0
   and every option the command carries appearing in its verb's help; every fenced block carries a
-  language tag, and a line starting ``poisson-prove`` sits only in a ``bash`` block or in the one
-  ``text`` block under "Hand over", which is ``poisson-prove sweep``.
+  language tag, and a line starting ``poisson-prove`` sits only in a ``bash`` block or in a
+  ``text`` block under "Hand over" (one block before M4, ``poisson-prove sweep``; since M4 the four
+  commands of the loop, pinned in ``test_frs_m4_try.py``). Since M4 one command carries ``--yes``,
+  the trial call of step 6, and a sweep the agent runs carries ``--dry-run`` or ``--try``.
 - (j) The plain words of the skill and the prompt are checked in PF8's corpus, not here.
 - (k) The scripted run reads the steps by number from the written skill and plays them with the
   expected files: ``expected/prove.toml`` is what step 3 writes (20 replicates, below the gate),
   without its ``[declare]`` table, which step 4 adds; the run's last ``prove.toml`` is that file
-  with only ``replicates`` changed, to the number the refusal's ``--replicates`` named.
+  with only ``replicates`` changed, to the number the refusal's ``--replicates`` named. Since M4
+  the skill has seven steps; this run plays the first five and stops where the check passes, and
+  the run through step 6 to the hand-over is ``test_frs_m4_try.py``'s (K8).
+- (ee) Since M4 the shared format's text is held where Prove still carries it: the rules and the
+  prompt byte for byte, and the check but for its one item on exit 0, which sent the agent to
+  "Hand over" and now sends it on to step 6. The shared hand-over is no longer Prove's.
+- (ff) Since M4 ``init --agent --repo DIR`` prints one more line when DIR is another folder (K9),
+  so that case's output is one line longer.
 - (l) ``sweep`` imports the target with the spec file's folder first on the import path, so
   ``prove_rollout:rollout`` resolves when ``poisson-prove`` runs as an installed command; no test
   puts the sample repository on ``PYTHONPATH``.
@@ -137,7 +147,7 @@ another's.
 | PF11.1 the four files, the same bytes, the template, nothing else changed, the output | ``test_pf11_1_*`` |
 | PF11.2 the refusal, ``--force``, ``--print`` | ``test_pf11_2_*`` |
 | PF11.3 the shared setup-file check | ``test_pf11_3_*`` |
-| PF11.4 the commands, ``--yes``, ``--dry-run``, the plain words | ``test_pf11_4_*`` |
+| PF11.4 the commands, ``--yes`` (the trial call alone since M4), ``--dry-run``, the plain words | ``test_pf11_4_*`` |
 | PF11.5 the scripted run | ``test_pf11_5_*`` |
 | PF11.6 each wrong setup | ``test_pf11_6_*`` |
 | PF11.7 the rollout never called; the network blocked; the time limit (its case is PF11.6's) | ``test_pf11_7_*`` |
@@ -672,7 +682,8 @@ def test_pf11_1_init_agent_writes_the_four_files_the_same_skill_twice_from_the_t
     assert sorted((cwd / w).resolve() for w in wrote) == sorted((repo / f).resolve() for f in FOUR), wrote
     assert f"  prompt  {PROMPT}" in out, r.out
     assert len([line for line in out if line.startswith("  next: ")]) == 1, r.out
-    assert len(out) == 1 + 4 + 2, r.out
+    # First run M4, K9: with --repo naming another folder, one more line says where to open the agent.
+    assert len(out) == 1 + 4 + 2 + (1 if case == "--repo from another folder" else 0), r.out
 
 
 # ---------- PF11.2 refusal, --force, --print ----------
@@ -771,8 +782,9 @@ def test_pf11_3_the_skill_passes_the_shared_setup_file_check(part: str, tmp_path
         doing = section(body, "## What you are doing").split("\n", 1)[1].strip()
         assert doing and "\n\n" not in doing, doing
         steps = steps_of(body)
-        assert [s.number for s in steps] == [1, 2, 3, 4, 5, 6], [s.number for s in steps]
-        assert [s.title for s in steps[4:]] == ["Run the check", "Stop and hand over"], [s.title for s in steps]
+        # First run M4, K7: seven steps, the one call between the check and the hand-over.
+        assert [s.number for s in steps] == [1, 2, 3, 4, 5, 6, 7], [s.number for s in steps]
+        assert [s.title for s in steps[4:]] == ["Run the check", "Call it once", "Hand over"], [s.title for s in steps]
         assert "```" not in steps[0].text and COMMAND not in steps[0].text, steps[0].text
         assert "prove_rollout.py" in steps[1].text, steps[1].text
         assert "case_id" in steps[1].text, steps[1].text
@@ -782,9 +794,11 @@ def test_pf11_3_the_skill_passes_the_shared_setup_file_check(part: str, tmp_path
             assert fact in steps[3].text, (fact, steps[3].text)
         for fact in ("--replicates", "next:", "prove.toml"):
             assert fact in steps[4].text, (fact, steps[4].text)
+        # First run M4: the hand-over is Prove's own (K7, in test_frs_m4_try.py); its list of what
+        # to confirm is still four items, after the line that names it.
         hand_over = section(body, "## Hand over")
-        assert hand_over.startswith(shared["hand-over"]), hand_over
-        tail = hand_over[len(shared["hand-over"]):]
+        assert hand_over.count("What the person must confirm:") == 1, hand_over
+        tail = hand_over.split("What the person must confirm:", 1)[1]
         items = [line for line in tail.splitlines() if re.match(r"^(?:- |\d+\. )", line)]
         assert len(items) == 4, tail
         for facts in (("axes",), ("outcomes",), ("replicates", "cost"), ("wrapper",)):
@@ -792,8 +806,15 @@ def test_pf11_3_the_skill_passes_the_shared_setup_file_check(part: str, tmp_path
     elif part == "the shared text":
         rules = section(body, "## Rules")
         assert rules.startswith(shared["rules"] + "\n\n" + OWN_RULES), rules[:2000]
-        assert section(body, "## The check").rstrip("\n") == shared["check"]
-        assert section(body, "## Hand over").startswith(shared["hand-over"] + "\n"), section(body, "## Hand over")
+        # First run M4 (reading ee): the check's text but for its item on exit 0, which no longer
+        # sends the agent to "Hand over"; the shared hand-over is not held.
+        check, theirs = section(body, "## The check").rstrip("\n").splitlines(), shared["check"].splitlines()
+        at = next(i for i, line in enumerate(theirs) if line.startswith("- If it exits 0"))
+        rest = next(i for i, line in enumerate(theirs) if line.startswith("- If it exits 1"))
+        mine = next(i for i, line in enumerate(check) if line.startswith("- If it exits 1"))
+        assert check[:at] == theirs[:at] and check[mine:] == theirs[rest:], check
+        on_zero = " ".join(check[at:mine])
+        assert on_zero.startswith("- If it exits 0") and '"Hand over"' not in on_zero and "step 6" in on_zero, on_zero
         assert PROMPT == shared["prompt"]
     else:
         listed = []
@@ -807,12 +828,12 @@ def test_pf11_3_the_skill_passes_the_shared_setup_file_check(part: str, tmp_path
 
 # ---------- PF11.4 the commands and the words ----------
 
-PF11_4_PARTS = ["every command parses", "no --yes", "every sweep the agent runs carries --dry-run",
-                "the person's command is one text block under Hand over", "commands only in tagged blocks"]
+PF11_4_PARTS = ["every command parses", "--yes on the trial call alone", "every sweep the agent runs carries --dry-run or --try",
+                "the person's commands are text blocks under Hand over", "commands only in tagged blocks"]
 
 
 @pytest.mark.parametrize("part", PF11_4_PARTS)
-def test_pf11_4_every_command_parses_none_answers_for_the_person_and_no_sweep_runs_without_dry_run(part: str, tmp_path: Path) -> None:
+def test_pf11_4_every_command_parses_only_the_trial_call_answers_for_the_person_and_no_sweep_runs_without_dry_run_or_try(part: str, tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     assert run(repo, "init", "--agent").code == 0
@@ -833,17 +854,25 @@ def test_pf11_4_every_command_parses_none_answers_for_the_person_and_no_sweep_ru
             verb_help = run(repo, verb, "--help").out if verb else run(repo, "--help").out
             for option in (w.split("=", 1)[0] for w in words[1:] if w.startswith("--")):
                 assert re.search(rf"(?<![\w-]){re.escape(option)}(?![\w-])", verb_help), (command, option)
-    elif part == "no --yes":
+    elif part == "--yes on the trial call alone":
+        # First run M4, FRS-18: the one exception to "never --yes" is the trial call of step 6.
         for command in everything:
-            assert not {"--yes", "-y"} & set(shlex.split(command)), command
-    elif part == "every sweep the agent runs carries --dry-run":
+            words = shlex.split(command)
+            assert "-y" not in words, command
+            assert "--yes" not in words or words[1:] == ["sweep", "--try", "--yes"], command
+        assert [c for c in everything if "--yes" in shlex.split(c)] == [c for c in agent if "--try" in shlex.split(c)], everything
+    elif part == "every sweep the agent runs carries --dry-run or --try":
+        # First run M4: the agent's two sweeps are the check and the one call; never a sweep itself.
         sweeps = [c for c in agent if "sweep" in shlex.split(c)]
         assert sweeps, agent
         for command in sweeps:
-            assert "--dry-run" in shlex.split(command), command
-    elif part == "the person's command is one text block under Hand over":
-        under = [c for s, c in person if s == "## Hand over"]
-        assert under == [NEXT_COMMAND], person
+            assert {"--dry-run", "--try"} & set(shlex.split(command)), command
+        assert any("--dry-run" in shlex.split(c) for c in sweeps), agent
+    elif part == "the person's commands are text blocks under Hand over":
+        # First run M4: the one command became the loop (K7 pins which commands); every command for
+        # the person still sits under "Hand over", and the sweep itself is among them.
+        assert person and all(s == "## Hand over" for s, _ in person), person
+        assert any(shlex.split(c)[:2] == shlex.split(NEXT_COMMAND) and "--try" not in shlex.split(c) for _, c in person), person
     else:
         blocks = fences(body)
         assert all(b.lang for b in blocks), [b.lines[:1] for b in blocks if not b.lang]
@@ -857,13 +886,14 @@ def test_pf11_4_every_command_parses_none_answers_for_the_person_and_no_sweep_ru
 # ---------- PF11.5 the scripted run ----------
 
 
-def test_pf11_5_the_scripted_run_plays_the_six_steps_and_ends_in_the_check_passing(tmp_path: Path) -> None:
+def test_pf11_5_the_scripted_run_plays_the_steps_to_the_check_and_ends_in_the_check_passing(tmp_path: Path) -> None:
     repo = sample_repo(tmp_path)
     assert run(repo, "init", "--agent").code == 0
     skill = (repo / FOUR[0]).read_text(encoding="utf-8")
     body = split_frontmatter(skill)[1]
     steps = steps_of(body)
-    assert [s.number for s in steps] == [1, 2, 3, 4, 5, 6] and [s.title for s in steps[4:]] == ["Run the check", "Stop and hand over"], steps
+    # First run M4: seven steps; this run plays the first five (reading k).
+    assert [s.number for s in steps] == [1, 2, 3, 4, 5, 6, 7] and [s.title for s in steps[4:]] == ["Run the check", "Call it once", "Hand over"], steps
     before = snapshot(repo)
     toml = (EXPECTED / "prove.toml").read_text(encoding="utf-8")
     without_declare, declare = toml.split("\n[declare]\n")
