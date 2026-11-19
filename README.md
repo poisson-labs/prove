@@ -71,8 +71,9 @@ ok  wrote the setup for your coding agent (4 files)
 
 This writes a skill your coding agent (Claude Code, Codex, Cursor) follows. Give it the prompt: it
 reads your code, writes `prove_rollout.py` and `prove.toml`, checks them with
-`poisson-prove sweep --dry-run`, and stops for you to review. Prove makes no model call and reads no
-key. When the files look right, run `poisson-prove sweep` yourself. The whole procedure is in
+`poisson-prove sweep --dry-run`, asks you before one real call of your agent (`sweep --try`), and
+hands over as ready or not ready. Prove makes no model call and reads no key. The loop is yours:
+`poisson-prove sweep`, your change, `sweep --pair-with latest`, then `poisson-prove diff`. See
 [Set Prove up with your coding agent](https://github.com/poisson-labs/prove/blob/main/docs/setup-with-your-agent.md).
 
 No agent at hand? `poisson-prove init --demo` writes a small support bot that needs no key, to set

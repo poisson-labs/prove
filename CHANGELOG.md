@@ -12,9 +12,19 @@ All notable changes to Poisson Prove are written here. The format follows
   Prove up on and try the whole loop with; `--with-setup` also writes the two files a coding agent
   would. The README and docs link `examples/your-first-real-agent/`, a small agent on a real
   model, and say what it needs: an OpenAI API key, the `agent` extra and a network (#3).
+- `poisson-prove sweep --try` calls the rollout once, on this machine, and says how it ended; it
+  stores nothing (#5). It checks the spec as `--dry-run` does, asks before the call (`--yes`
+  answers it), and exits 1 with the file and line of a raise when the call does not end in an
+  Episode a sweep could store. What the rollout prints goes to stderr.
 
 ### Changed
 
+- The setup skill `init --agent` writes now asks before calling your agent once with
+  `sweep --try`, hands over as ready or not ready, and gives you the whole loop: the sweep
+  before, the change, the sweep after on the same seeds with `--pair-with`, and `diff` (#5).
+  `init --agent --repo DIR` says where to open your coding agent when `DIR` is another folder.
+- After a complete sweep of your own agent, `next:` is the sweep that pairs with it, naming the
+  run, after a `then` line that says to change your agent first.
 - A sweep that is not paired with an earlier one is now sized for the paired sweep that follows
   it: its plan gives both readings and refuses a design either cannot pass, so `sweep --pair-with`
   on the same spec and replicates is never refused for its size (#6). A paired sweep whose earlier

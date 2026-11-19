@@ -524,6 +524,22 @@ class RunResult(Result):
 
 
 @dataclass(frozen=True, eq=False)
+class Trial(Result):
+    """One real call of a rollout (``sweep --try``): how it ended. Nothing was stored."""
+
+    KIND: ClassVar[str] = "trial"
+    details: tuple[tuple[str, str], ...] = ()
+    #: The call was made and did not end in an Episode the spec's sweep could store.
+    failed: bool = False
+    #: The ``error:`` line of a failed call, or None.
+    error: str | None = None
+    #: A failed call's ``label  value`` lines: where it was raised and what called it.
+    frames: tuple[tuple[str, str], ...] = ()
+    #: A raise's traceback, which the errors log also holds; empty when nothing was raised.
+    traceback: str = ""
+
+
+@dataclass(frozen=True, eq=False)
 class Event:
     """One event of a sweep, as ``events.jsonl`` holds it."""
 
