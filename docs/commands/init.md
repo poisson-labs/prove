@@ -91,7 +91,9 @@ examples:
   `.claude/skills/poisson-prove-setup/`. [Set Prove up with your coding agent](../setup-with-your-agent.md)
   says what the skill asks of your agent.
 - `--repo DIR`, with `--agent` or `--demo`, writes into another folder. `--demo` makes the folder
-  when it is missing; `--agent` wants a folder that is there.
+  when it is missing; `--agent` wants a folder that is there. With `--agent`, when `DIR` is
+  another folder than this one, one more line, `open  your coding agent in DIR`, says where to
+  start your coding agent: it reads the skill from the folder it is opened in.
 - `--print`, with `--agent`, prints the skill and writes nothing.
 - `--demo` writes the demo agent instead of a spec: `support_bot.py`, a support bot that calls no
   model and needs no key and no network; `prompts.py`, its system prompt; and `demo.md`, which says
@@ -213,6 +215,24 @@ $ poisson-prove init --example --out other.toml --json
   "next": ["poisson-prove sweep other.toml"]
   …
 }
+```
+
+The setup written into another folder, with the line that says where to open your coding agent.
+The line is printed only when `--repo` names another folder than this one, read after links and
+relative parts are resolved; the four files are the same either way.
+
+<!-- docs-check: run -->
+```console
+$ mkdir my-agent
+$ poisson-prove init --agent --repo my-agent
+ok  wrote the setup for your coding agent (4 files)
+  wrote  my-agent/.agents/skills/poisson-prove-setup/SKILL.md
+  wrote  my-agent/.agents/skills/poisson-prove-setup/prompt.txt
+  wrote  my-agent/.claude/skills/poisson-prove-setup/SKILL.md
+  wrote  my-agent/.claude/skills/poisson-prove-setup/prompt.txt
+  open  your coding agent in my-agent
+  prompt  Use the poisson-prove-setup skill in this repository: set Poisson Prove up for me to review, then stop.
+  next: give your coding agent the prompt above, then review what it wrote
 ```
 
 The demo agent, into a folder of its own, and then with the two files a coding agent would write:

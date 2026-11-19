@@ -253,6 +253,10 @@ class _IO:
     def err_next(self, command: str) -> None:
         self._err(f"  next: {command}", lambda term, t: term.command(t, "next:"))
 
+    def err_detail(self, label: str, value: str) -> None:
+        """A ``label  value`` line under an ``error:`` line, on stderr."""
+        self._err(f"  {label}  {value}", lambda term, t: term.detail(label, self._a(value)))
+
     def _err(self, line: str, draw: Callable[[Terminal, str], str]) -> None:
         line = self._a(line)
         if self.err_term is None:
@@ -515,11 +519,13 @@ def _build_parser(io: _IO) -> _Parser:
         description=(
             "Run every condition of a sweep spec, N replicates each, on the local machine or a\n"
             "remote backend. The plan is printed first, with its cost estimate, and the sweep\n"
-            "starts only after a yes."
+            "starts only after a yes. With --try, call the rollout once instead, on this\n"
+            "machine, and say how it ended; nothing is stored."
         ),
         epilog=(
             "examples:\n"
             f"  {_COMMAND} sweep\n"
+            f"  {_COMMAND} sweep --try\n"
             f"  {_COMMAND} sweep --target my_agent:rollout_patched --pair-with latest --yes\n"
             f"  {_COMMAND} sweep other.toml --target my_agent:rollout --replicates 300"
         ),
@@ -582,7 +588,8 @@ def _build_parser(io: _IO) -> _Parser:
         "--episode-timeout",
         type=float,
         metavar="S",
-        help="seconds an episode may take before it is recorded as timed out (default: no limit)",
+        help="seconds an episode may take before it is recorded as timed out (default: no "
+        "limit; with --try, 300)",
     )
     sweep.add_argument(
         "--max-rollouts",
@@ -605,7 +612,18 @@ def _build_parser(io: _IO) -> _Parser:
     sweep.add_argument(
         "--dry-run", action="store_true", help="print the plan and stop; nothing is run or written"
     )
-    sweep.add_argument("--yes", action="store_true", help="skip the question after the plan")
+    sweep.add_argument(
+        "--try",
+        dest="try_once",
+        action="store_true",
+        help="call the rollout once, for real, on this machine, on the spec's first condition, "
+        "and say how it ended; nothing is stored (default: run the sweep)",
+    )
+    sweep.add_argument(
+        "--yes",
+        action="store_true",
+        help="skip the question after the plan, or with --try the question before the call",
+    )
     _add_json_option(sweep, "the plan and the result")
     remote = sweep.add_argument_group(
         "remote backends (override the [modal] table; --infra-retries, --max-cost and "
@@ -2071,10 +2089,96 @@ def _sweep_overrides(ns: argparse.Namespace, state: _State) -> dict[str, Any]:
     out["typed"] = list(state.argv)
     out["spec_typed"] = ns.spec
     out["dry_run"] = bool(ns.dry_run)
+    out["try"] = bool(getattr(ns, "try_once", False))
     return out
 
 
+def _cmd_try(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    """``sweep --try``: check the setup as ``--dry-run`` does, say what the one call is, ask, make
+    the call in a process of its own and say how it ended. Nothing is stored. What the rollout
+    writes goes to stderr as it arrives, never to stdout. Exit 0 for a call that returned an
+    Episode the sweep could store and for a no at the question; 1 for a call that was made and
+    did not, and for a setup the check refuses; 2 for a wrong command line, which a stdin that is
+    not a terminal without ``--yes`` is here."""
+    given = [
+        flag
+        for flag, on in (
+            ("--dry-run", ns.dry_run),
+            ("--resume", ns.resume is not None),
+            ("--pair-with", ns.pair_with is not None),
+        )
+        if on
+    ]
+    if given:
+        raise _Usage(
+            f"--try calls the rollout once and stores nothing; it takes no {', '.join(given)}",
+            [f"{_COMMAND} sweep --try", f"{_COMMAND} sweep --help"],
+        )
+    planned = core.plan(None, store=store, overrides=_sweep_overrides(ns, state))
+    _notes_of(io, planned)
+    if not ns.json:
+        io.verdict("try", core.trial_sentence(planned))
+        io.detail("cost", core.TRY_COST)
+    if not ns.yes and not io.inp.isatty():
+        raise _Usage(
+            "stdin is not a terminal, so the question before the call cannot be asked; --yes "
+            "makes the call without it",
+            [f"{_look.command(_COMMAND, *planned.options['typed_named'])} --yes"],
+        )
+    if not ns.yes:
+        io.err_write("Call it? [y/N] ")
+        io.err.flush()
+        answer = io.inp.readline().strip().lower()
+        if answer not in ("y", "yes"):
+            sentence = "the rollout was not called: declined at the question; nothing was run"
+            if ns.json:
+                _write_json(io, "sweep", "stopped", sentence, {}, [])
+            else:
+                io.verdict("stopped", sentence)
+            return 0
+    try:
+        io.flush()
+    except (OSError, ValueError):
+        pass
+    last = {"text": "\n"}
+
+    def passed_on(stream: str, text: str) -> None:
+        # The rollout's stdout and stderr both: stdout holds Prove's own lines and nothing else.
+        io.err.write(text)
+        io.err.flush()
+        last["text"] = text[-1:]
+
+    try:
+        result = core.try_once(planned, on_output=passed_on)
+    finally:
+        if last["text"] != "\n":
+            # What the rollout left without a newline at its end does not run into Prove's lines.
+            io.err.write("\n")
+            io.err.flush()
+    _notes_of(io, result)
+    if result.failed:
+        if state.debug and result.traceback:
+            io.err_write(result.traceback)
+        io.error(result.error or result.sentence)
+        for label, value in result.frames:
+            io.err_detail(label, value)
+        for command in result.next:
+            io.err_next(command)
+        return 1
+    if ns.json:
+        _write_json(io, "sweep", result.verdict, result.sentence, result.payload, result.next)
+        return 0
+    io.verdict(result.verdict, result.sentence)
+    for label, value in result.details:
+        io.detail(label, value)
+    for command in result.next:
+        io.next(command)
+    return 0
+
+
 def _cmd_sweep(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    if ns.try_once:
+        return _cmd_try(ns, io, store, state)
     planned = core.plan(None, store=store, overrides=_sweep_overrides(ns, state))
     _notes_of(io, planned)
     if not ns.json:
@@ -2237,10 +2341,22 @@ def _cmd_init_agent(ns: argparse.Namespace, io: _IO, state: _State) -> int:
     io.verdict("ok", written.sentence)
     for path in written.payload["wrote"]:
         io.detail("wrote", path)
+    if ns.repo is not None and _another_folder(ns.repo):
+        # The skill is read from the folder the coding agent is opened in.
+        io.detail("open", f"your coding agent in {ns.repo}")
     io.detail("prompt", written.payload["prompt"])
     for line in written.next:
         io.next(line)
     return 0
+
+
+def _another_folder(folder: str) -> bool:
+    """Whether ``folder`` is another folder than the one the command runs in, read after links
+    and relative parts are resolved."""
+    try:
+        return Path(folder).resolve() != Path.cwd().resolve()
+    except OSError:
+        return True
 
 
 # ---------- diff / report / check ----------

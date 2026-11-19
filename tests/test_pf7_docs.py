@@ -764,7 +764,9 @@ def test_pf7_2_the_setup_page_carries_the_prompt_the_steps_and_the_options(tmp_p
     text = text_of(rel)
     missing = [] if init_agent_json(tmp_path)["prompt"] in flat(text) else ["the prompt init --agent prints"]
     steps = skill_steps(tmp_path)
-    assert len(steps) == 6, steps
+    # First run M4, K7: the skill has seven steps (six before it), the one call between the check
+    # and the hand-over; the page names each.
+    assert len(steps) == 7, steps
     missing += [f"the step {s!r}" for s in steps if s.lower() not in text.lower()]
     missing += [o for o in ("--force", "--repo", "--print", "--dry-run", "--yes") if f"`{o}" not in text and f" {o}" not in backticked(text)]
     assert missing == [], missing

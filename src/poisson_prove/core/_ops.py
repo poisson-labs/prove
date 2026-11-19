@@ -32,7 +32,7 @@ from typing import Any, Protocol, cast
 
 import pandas as pd
 
-from poisson_prove import _facts, _look, _where_checks, stats
+from poisson_prove import _facts, _look, _trial, _where_checks, stats
 from poisson_prove import executor_modal as _modal
 from poisson_prove._compat import (
     RETIRED_STORE_VARIABLE,
@@ -68,6 +68,7 @@ from poisson_prove.core._results import (
     RunResult,
     Spec,
     Stopped,
+    Trial,
     WrittenFiles,
 )
 from poisson_prove.diff import (
@@ -2417,7 +2418,9 @@ def plan(
     with the plan attached, so a face can still show it. The target is imported with the spec
     file's folder first on the import path; with ``overrides["dry_run"]`` (the check) it
     is imported with the network blocked and a time limit, its name and signature are checked,
-    and it is never called."""
+    and it is never called. With ``overrides["try"]`` (the trial call) the setup is checked the
+    same way and the plan is held to this machine, whatever the spec says; ``try_once`` then
+    makes the one call."""
     with contextlib.ExitStack() as on_path:
         return _planned(spec, store=store, overrides=overrides, on_path=on_path, _notes=_notes)
 
@@ -2450,12 +2453,23 @@ def _planned(
     _notes: list[str],
 ) -> Plan:
     o = dict(overrides or {})
-    checked = bool(o.get("dry_run"))
+    trying = bool(o.get("try"))
+    checked = bool(o.get("dry_run")) or trying
     store = _opened(store)
     typed = list(o.get("typed") or [])
     backend = o.get("backend") or _spec_backend(spec, o)
     image = o.get("image") or "image"
-    if backend == "local":
+    elsewhere = trying and backend != "local"
+    if elsewhere:
+        # The trial call runs on this machine whatever the spec says: nothing of Modal's or the
+        # cluster's is imported, checked or called, and the options that go with them are unread.
+        said = "Modal" if backend == "modal" else "your cloud account"
+        _notes.append(
+            f"sweeps of this spec run on {said}; the trial call runs on this machine, so your "
+            "agent's keys must be set here for it"
+        )
+        backend = "local"
+    if backend == "local" and not elsewhere:
         stray = [name for name in MODAL_ONLY_FLAGS if o.get(name) is not None]
         if stray or image != "image":
             names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
@@ -2748,6 +2762,175 @@ def _planned(
     )
 
 
+#: How long the trial call may take when ``--episode-timeout`` gives no limit.
+TRY_LIMIT_S = _trial.DEFAULT_LIMIT_S
+
+
+def _try_command(o: Mapping[str, Any], typed_target: str | None, *, again: bool) -> str:
+    """The trial's ``next:``: the sweep itself after a good call, the trial again after a failed
+    one, each on the spec, the target and the store that were typed."""
+    spec, options = _carried(o, typed_target)
+    return join([COMMAND, "sweep", *(["--try"] if again else []), *spec, *options])
+
+
+def _shown_file(path: str, folder: str) -> str:
+    """A file of a traceback as the person finds it: by its path from the spec's folder when it
+    is under it, else whole."""
+    try:
+        real, base = os.path.realpath(path), os.path.realpath(folder)
+        if os.path.commonpath([real, base]) == base:
+            return Path(os.path.relpath(real, base)).as_posix()
+    except (OSError, ValueError):
+        pass
+    return path
+
+
+def _outcome_kind(spec: SweepSpec, outcome: str) -> str:
+    """The kind the spec declares for an outcome, as the trial's ``outcome`` line says it."""
+    declared = spec.declare
+    if declared is None or not (declared.failures or declared.successes):
+        return "no kind declared"
+    if outcome in declared.failures:
+        return "a failure"
+    if outcome in declared.successes:
+        return "a success"
+    return "declared neither a failure nor a success"
+
+
+def _limit_words(limit: float) -> str:
+    return f"{_look.fmt_num(limit)} s"
+
+
+def trial_of(plan: Plan) -> tuple[dict[str, Any], int]:
+    """The one case a trial call runs: the plan's first condition, as the spec writes it, and
+    the seed of its first replicate under the plan's salt."""
+    pair = plan.inner.pairs[0]
+    return dict(pair.config), int(pair.seed)
+
+
+def trial_sentence(plan: Plan) -> str:
+    """What the trial call is, said before it is made: the target, the condition, the seed and
+    where it runs."""
+    config, seed = trial_of(plan)
+    return (
+        f"one call of {plan.target} on {_look.condition_words(config)}, seed {seed}, on this "
+        "machine"
+    )
+
+
+#: The trial's cost line: what it spends is the agent's own, and nothing of Prove's is kept.
+TRY_COST = "your agent's own calls for one case; Prove stores nothing"
+
+
+@_operation
+def try_once(
+    plan: Plan,
+    *,
+    on_output: Callable[[str, str], None] | None = None,
+    _notes: list[str],
+) -> Trial:
+    """Call the plan's rollout once, for real, on this machine, and say how it ended. ``plan`` is
+    one made with ``overrides["try"]``. The call runs in a process of its own with the network
+    allowed, on the plan's first condition; it may take ``--episode-timeout`` seconds, 300 when
+    none was given. ``on_output(stream, text)`` gets what the rollout writes to its ``stdout``
+    and ``stderr`` as it arrives. Nothing is stored: no run, no store folder, no ledger line. A
+    call that does not end in an Episode the spec's sweep could store is a ``Trial`` with
+    ``failed`` set, its ``error`` sentence and its ``frames``; a raise's traceback is appended
+    to the errors log."""
+    o = plan.options
+    spec = plan.inner.spec
+    config, seed = trial_of(plan)
+    folder = str(o.get("spec_folder") or os.getcwd())
+    module, attr = split_import_path(plan.target)
+    given = o.get("episode_timeout")
+    limit = TRY_LIMIT_S if given is None else float(given)
+    call = _trial.call_once(
+        module, attr, folder=folder, config=config, seed=seed, limit=limit, on_output=on_output
+    )
+    again = _try_command(o, plan.typed_target, again=True)
+    condition = _look.condition_words(config)
+
+    def failed(message: str, frames: Sequence[tuple[str, str]] = ()) -> Trial:
+        return Trial(
+            verdict="failed",
+            sentence=_final(message),
+            payload={},
+            next=(again,),
+            failed=True,
+            error=_final(message),
+            frames=tuple(frames),
+            traceback=call.traceback,
+        )
+
+    if call.ended == "timeout":
+        what = "importing the target" if call.during == "import" else "the rollout"
+        return failed(f"{what} ran past {_limit_words(call.limit)} and was ended")
+    if call.ended == "exited":
+        code = "" if call.exit_code is None else f" (exit {call.exit_code})"
+        return failed(f"the rollout ended its own process before it returned{code}")
+    if call.ended == "raised":
+        frames: list[tuple[str, str]] = []
+        if call.raised is not None:
+            frames.append(("raised in", f"{_shown_file(call.raised[0], folder)}:{call.raised[1]}"))
+        if call.called is not None and call.called != call.raised:
+            frames.append(
+                ("called from", f"{_shown_file(call.called[0], folder)}:{call.called[1]}")
+            )
+        if call.traceback:
+            _log_traceback(call.traceback, list(o.get("typed") or []))
+            frames.append(("traceback", str(_ERRORS_LOG)))
+        what = "importing the target" if call.during == "import" else "the rollout"
+        return failed(f"{what} raised {_python_words(call.kind, call.message)}", frames)
+    if call.ended == "not an episode":
+        return failed(f"the rollout returned a value of type {call.kind}, not an Episode")
+    if call.ended == "unstorable":
+        return failed(
+            f"the rollout returned an Episode whose meta cannot be stored: {call.message}"
+        )
+    episode = dict(call.episode or {})
+    outcome = str(episode["outcome"])
+    declared = spec.declare
+    listed = tuple(declared.outcomes) if declared is not None else ()
+    if listed and outcome not in listed:
+        return failed(
+            f'the rollout returned the outcome "{outcome}", which [declare] does not list; it '
+            f"lists {_join_words(listed)}"
+        )
+    t, horizon = episode["t"], episode["horizon"]
+    meta = dict(episode.get("meta") or {})
+    details = [
+        ("condition", condition),
+        ("seed", str(seed)),
+        ("outcome", f"{outcome} ({_outcome_kind(spec, outcome)})"),
+        ("t", f"{_look.fmt_num(t)} of {_look.fmt_num(horizon)} {spec.t_unit}"),
+    ]
+    if "case_id" in meta:
+        details.append(("case_id", _look.one_line(str(meta["case_id"]))))
+    if call.printed:
+        lines = "1 line" if call.printed == 1 else f"{_look.fmt_count(call.printed)} lines"
+        details.append(("printed", f"{lines}, on stderr above"))
+    return Trial(
+        verdict="ok",
+        sentence=(
+            f'the rollout ran once and returned "{outcome}" in {_look.fmt_duration(call.seconds)}'
+        ),
+        payload={
+            "try": {
+                "condition": config,
+                "seed": seed,
+                "outcome": outcome,
+                "t": t,
+                "horizon": horizon,
+                "meta": meta,
+                "seconds": float(call.seconds),
+                "printed": int(call.printed),
+            }
+        },
+        next=(_try_command(o, plan.typed_target, again=False),),
+        details=tuple(details),
+    )
+
+
 def _produced_by(spec_path: str | None, target: str, backend: str) -> dict[str, Any]:
     """What this segment of the run is made from, as the manifest's ``produced_by`` records it
     (the artifact format's 1.1): this version; ``from``, the sweep spec file by its name without
@@ -2806,19 +2989,80 @@ def _typed_store(o: Mapping[str, Any]) -> list[str]:
     return _look.typed_store(list(o.get("typed_named") or ()))
 
 
-def _after_sweep(o: Mapping[str, Any], idx: Index, run_id: str, target: str) -> list[str]:
+#: What a complete sweep of the person's own agent, paired with nothing, says before its
+#: ``next:``, the sweep that pairs with it.
+THEN_CHANGE = "change your agent; the next sweep runs it on the same seeds"
+
+
+def _typed_value(typed: Sequence[str], option: str) -> list[str]:
+    """``[option, VALUE]`` as the command was typed with it, however it was written, else
+    nothing."""
+    for at, word in enumerate(typed):
+        if word == option and at + 1 < len(typed):
+            return [option, typed[at + 1]]
+        if word.startswith(option + "="):
+            return [option, word.split("=", 1)[1]]
+    return []
+
+
+def _carried(o: Mapping[str, Any], typed_target: str | None) -> tuple[list[str], list[str]]:
+    """What a sweep's own ``next:`` sweep carries of what was typed, so that it reads the same
+    spec, runs the same target at the same size and acts on the same store: the spec path, and
+    then ``--target``, ``--replicates``, ``--max-mde`` and ``--store``."""
+    typed = list(o.get("typed") or [])
+    spec = [] if o.get("spec_typed") is None else [str(o["spec_typed"])]
+    options = [] if typed_target is None else ["--target", typed_target]
+    for option in ("--replicates", "--max-mde"):
+        options += _typed_value(typed, option)
+    return spec, [*options, *_typed_store(o)]
+
+
+def _earlier_pair(st: Store, idx: Index, run_id: str) -> str | None:
+    """The run ``run_id`` shares its seeds with: the newest run made before it with its salt."""
+    try:
+        mine = st.manifest(run_id)
+        earlier = []
+        for run in idx.runs:
+            if run.run_id == run_id:
+                continue
+            other = st.manifest(run.run_id)
+            if other.run_salt == mine.run_salt and str(other.created_at) < str(mine.created_at):
+                earlier.append((str(other.created_at), run.run_id))
+    except StoreError:
+        return None
+    return max(earlier)[1] if earlier else None
+
+
+def _after_sweep(
+    o: Mapping[str, Any],
+    idx: Index,
+    run_id: str,
+    target: str,
+    *,
+    st: Store | None = None,
+    typed_target: str | None = None,
+) -> tuple[list[str], str | None]:
+    """A complete sweep's ``next:`` lines and, before them, its ``then`` line or None. A paired
+    sweep is followed by the comparison; the packaged mock by its patched twin; any other sweep
+    paired with nothing by the sweep that pairs with it, naming the run."""
     pair_with = o.get("pair_with")
     store = _typed_store(o)
+    if pair_with is None and o.get("resume") is not None and st is not None:
+        # A paired sweep that was stopped and resumed is still the second of its pair.
+        pair_with = _earlier_pair(st, idx, run_id)
     if pair_with is not None:
         newest = [r.run_id for r in idx.complete[:2]]
         if newest == [run_id, pair_with]:
-            return [join([COMMAND, "diff", *store])]
-        return [join([COMMAND, "diff", idx.word_for(pair_with), idx.word_for(run_id), *store])]
+            return [join([COMMAND, "diff", *store])], None
+        words = [COMMAND, "diff", idx.word_for(pair_with), idx.word_for(run_id), *store]
+        return [join(words)], None
     if target == MOCK_ROLLOUT:
         spec = [] if o.get("spec_typed") is None else [o["spec_typed"]]
         twin = ["--target", MOCK_PATCHED, "--pair-with", "latest"]
-        return [join([COMMAND, "sweep", *spec, *twin, *store])]
-    return []
+        return [join([COMMAND, "sweep", *spec, *twin, *store])], None
+    spec, options = _carried(o, typed_target)
+    words = [COMMAND, "sweep", *spec, "--pair-with", idx.word_for(run_id), *options]
+    return [join(words)], THEN_CHANGE
 
 
 def _commonest_error(store: Store, run_id: str) -> str | None:
@@ -3227,6 +3471,7 @@ def _sweep_result(
     nexts: list[str] = []
     stopped = False
     error: str | None = None
+    then: str | None = None
     details: list[tuple[str, str]] = []
     if summary.stopped_by == _modal.FIRST_BATCH_ERRORED:
         # No resume line: resuming would run the same broken target. The one next is a look at
@@ -3266,7 +3511,10 @@ def _sweep_result(
         stopped = True
     else:
         verdict = "done"
-        nexts.extend(_after_sweep(o, idx, run_id, plan.target))
+        after, then = _after_sweep(
+            o, idx, run_id, plan.target, st=st, typed_target=plan.typed_target
+        )
+        nexts.extend(after)
         missing = ", ".join(f'"{m}"' for m in plan.missing_instrumentors)
         unrecorded = f"; no spans from {missing}, not installed" if missing else ""
         sentence = (
@@ -3282,6 +3530,8 @@ def _sweep_result(
     if summary.n_infra_retried or summary.n_infra_failed:
         details.append(("infrastructure retries", n(summary.n_infra_retried)))
         details.append(("infrastructure failures", n(summary.n_infra_failed)))
+    if then is not None:
+        details.append(("then", then))
     payload = {
         **payload,
         "status": status,
