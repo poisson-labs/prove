@@ -66,6 +66,11 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   "Hand over" and now sends it on to step 6. The shared hand-over is no longer Prove's.
 - (ff) Since M4 ``init --agent --repo DIR`` prints one more line when DIR is another folder (K9),
   so that case's output is one line longer.
+- (gg) Since First run M6 (A7, M6-22) ``init --agent`` prints one more detail line, on how to ask
+  for more than the cases, so every case's output is one line longer; the prompt and its line are
+  as they were. The expected files of this suite keep their three axes: they stand for a setup
+  whose person asked to compare the prompt version and the temperature. What the skill's step 3
+  writes unasked is pinned in ``test_frs_m6_cost.py`` (A1, A6).
 - (l) ``sweep`` imports the target with the spec file's folder first on the import path, so
   ``prove_rollout:rollout`` resolves when ``poisson-prove`` runs as an installed command; no test
   puts the sample repository on ``PYTHONPATH``.
@@ -95,8 +100,9 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
 - (u) The two design rows pin the shape, not the numbers (the gate is PF4's): the plan on
   stdout then the refusal, a ``next:`` line carrying ``--replicates``; a design that cannot flag a
   lone condition carries no ``--max-mde`` offer.
-- (v) The plan of a right setup: its first line ``plan  `` with the rollout count, the target id and
-  ``$0``; the ``target`` detail line ``prove_rollout:rollout (imports, takes cfg and seed)``; the
+- (v) The plan of a right setup: its first line ``plan  `` with the rollout count, the target id and,
+  since First run M6 (C1), the words ``not priced`` and no dollar sign, the expected spec declaring
+  no ``[cost]`` (``$0 (local)`` before it); the ``target`` detail line ``prove_rollout:rollout (imports, takes cfg and seed)``; the
   ``outcomes`` detail line naming each failure after ``failures:`` and each success after
   ``successes:``; no ``note:``. The conditions, replicates and limit lines are PF4's and PF3's.
 - (w) The import over 30 s waits 30 s, so its case is marked ``slow``.
@@ -683,7 +689,8 @@ def test_pf11_1_init_agent_writes_the_four_files_the_same_skill_twice_from_the_t
     assert f"  prompt  {PROMPT}" in out, r.out
     assert len([line for line in out if line.startswith("  next: ")]) == 1, r.out
     # First run M4, K9: with --repo naming another folder, one more line says where to open the agent.
-    assert len(out) == 1 + 4 + 2 + (1 if case == "--repo from another folder" else 0), r.out
+    # First run M6, A7: one more detail line, on how to ask for more than the cases (reading gg).
+    assert len(out) == 1 + 4 + 3 + (1 if case == "--repo from another folder" else 0), r.out
 
 
 # ---------- PF11.2 refusal, --force, --print ----------
@@ -1058,7 +1065,8 @@ def _points_to_the_rollout_contract(child: Child) -> None:
 
 def _plan_lines(child: Child) -> None:
     first = child.out.splitlines()[0]
-    assert first.startswith("plan  ") and "support-agent" in first and "$0" in first, first
+    # First run M6, C1: this spec declares no [cost], so the plan gives no dollar figure (reading v).
+    assert first.startswith("plan  ") and "support-agent" in first and "not priced" in first and "$" not in first, first
     rollouts = re.search(r"([\d,]+) rollouts", first)
     found = re.search(r"^replicates = (\d+)$", child.spec, flags=re.M)
     assert found, child.spec

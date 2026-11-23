@@ -67,7 +67,11 @@ of the setup-agent tests and the demo agent ``init --demo`` writes.
 - (p) K7 pins the skill by structure. "The four loop commands in their own blocks" are the three
   of the loop (the sweep before with a note, the paired sweep with a note, ``diff``) and the trial
   the person runs first when the hand-over is not ready: four ``text`` blocks under "Hand over",
-  one command each. The frozen setup-agent tests keep the rest (the frontmatter, the sections, the
+  one command each. Since First run M6 (L1, M6-23) a fifth block follows the loop, the comparison
+  of one outcome the loop's ``diff`` leaves out (``diff --event NAME``), pinned in
+  ``test_frs_m6_cost.py``; the four are the blocks before it. Since M6 (A3) the hand-over also
+  has an item for the axes the skill did not add, so "one reason line per axis" is read on the
+  item that opens with the axes of ``prove.toml``. The frozen setup-agent tests keep the rest (the frontmatter, the sections, the
   shared rules and prompt, every command parsing).
 - (q) K8, the scripted run. The stand-in for a coding agent reads the steps and the commands from
   the written skill and decides as step 6 says: a call that exits 1 with its ``raised in`` line
@@ -78,7 +82,9 @@ of the setup-agent tests and the demo agent ``init --demo`` writes.
   ``not ready:`` quoting the ``TypeError``, with the call's output naming ``prove_rollout.py`` and
   the line; with the wrapper fixed it reaches ``ready:``.
 - (r) K9: "another folder" is read after links and relative parts are resolved. The line carries
-  DIR as typed and sits between the ``wrote`` lines and the ``prompt`` line.
+  DIR as typed and sits between the ``wrote`` lines and the ``prompt`` line. Since First run M6
+  (A7) every ``init --agent`` prints one more detail line after the ``prompt`` line, so each
+  case's output is one line longer.
 - (s) K10: the ``then`` line is the line before the one ``next:``. The run is named by a word that
   reaches it alone, its name when that does. "Run as printed" is the printed command with ``--yes``
   added, since the test's stdin is not a terminal. The command must start a paired sweep in every
@@ -748,7 +754,10 @@ def test_k7_the_skill_is_seven_steps_that_ask_call_once_and_hand_over_the_loop(p
     elif part == "the four commands of the loop, each in its own block":
         blocks = [f for f in pf11.fences(body) if f.lang == "text" and f.section == "## Hand over"]
         assert all(len([line for line in f.lines if line.strip()]) == 1 for f in blocks), blocks
-        assert len(person) == 4, person
+        # First run M6, L1: after the loop, one more block, the comparison of an outcome the
+        # loop's diff leaves out; the four of the loop are the blocks before it (reading p).
+        assert len(person) == 5 and "--event" in words_of(person[4]), person
+        person = person[:4]
         shapes = []
         for command in person:
             words = words_of(command)
@@ -767,7 +776,9 @@ def test_k7_the_skill_is_seven_steps_that_ask_call_once_and_hand_over_the_loop(p
         # The loop is the person's to run: the hand-over says so after its last command.
         assert re.search(r"\b(?:do not|never) run\b", text[text.rindex("```"):], re.I), text[text.rindex("```"):]
     elif part == "one reason line for each axis":
-        items = [item for item in hand_over_items(body) if re.search(r"\baxis\b", item)]
+        # First run M6, A3: the item for the axes not added also speaks of axes; this is the item
+        # that opens with the axes of prove.toml (reading p).
+        items = [item for item in hand_over_items(body) if re.match(r"Each axis\b[^.\n]*`prove\.toml`", item)]
         assert len(items) == 1 and "values" in items[0] and re.search(r"\bwhy\b", items[0]), hand_over
     elif part == "the last output of the check and of the call, as printed":
         items = [item.splitlines()[0] for item in hand_over_items(body) if re.search(r"\boutput\b", item.splitlines()[0])]
@@ -940,7 +951,8 @@ def test_k9_init_agent_prints_the_open_line_exactly_when_repo_is_another_folder(
         assert out[at - 1].startswith("  wrote  ") and out[at + 1] == f"  prompt  {pf11.PROMPT}", out
     else:
         assert opened == [], r.out
-    assert len(out) == 1 + 4 + (3 if elsewhere else 2), r.out
+    # First run M6, A7: one more detail line, on how to ask for more than the cases (reading r).
+    assert len(out) == 1 + 4 + (4 if elsewhere else 3), r.out
     # The four files are what they are without the line.
     repo = other if elsewhere else here
     fresh = pf11.fresh_skill(tmp_path)
@@ -1091,10 +1103,11 @@ def test_the_0_5_0_entry_has_the_trial_the_skill_and_the_loops_next() -> None:
         block = entry.split(f"\n### {heading}\n", 1)[1].split("\n### ", 1)[0]
         return [" ".join(item.split()) for item in re.split(r"(?m)^- ", block) if item.strip()]
 
-    trial = [item for item in items("Added") if "sweep --try" in item]
+    # First run M6 adds an item of its own on the trial and one on the skill; M4's are the two for #5.
+    trial = [item for item in items("Added") if "sweep --try" in item and "(#5)" in item]
     assert len(trial) == 1, items("Added")
     assert missing(trial[0], "(#5)", "once", "this machine", "stores nothing") == [], trial[0]
-    skill = [item for item in items("Changed") if "skill" in item]
+    skill = [item for item in items("Changed") if "skill" in item and "(#5)" in item]
     assert len(skill) == 1, items("Changed")
     assert missing(skill[0], "(#5)", "init --agent", "sweep --try", "ready", "not ready", "--pair-with", "diff") == [], skill[0]
     loop = [item for item in items("Changed") if "next:" in item and "skill" not in item]

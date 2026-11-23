@@ -532,7 +532,9 @@ def test_i12_preflight_fresh_plan(tmp_path: Path) -> None:
         assert token in sweep_line, (token, sweep_line)
     backend_line = _line_with(text, "Backend: local")
     assert TARGET in backend_line and T_UNIT in backend_line
-    cost_line = _line_with(text, "Cost: $0")
+    # First run M6 (C1, M6-2): a plan on this machine with no [cost] gives no dollar figure.
+    cost_line = _line_with(text, "Cost: ")
+    assert "not priced" in cost_line and "[cost]" in cost_line and "$" not in cost_line, cost_line
     # PF4.22: the preflight block prints no limit at a base rate of 0.5 (the normal
     # approximation, beside the gate's own); the plan's one limit is the gate's.
     assert "MDE at N=" not in text and "base rate 0.5" not in text

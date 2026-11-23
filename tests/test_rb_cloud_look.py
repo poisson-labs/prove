@@ -100,8 +100,10 @@ def test_v1_the_plan_is_the_specs_block_line_for_line(w: CloudWorld) -> None:
     cost = _look.fmt_dollars(estimate(27, nodes=4, slots=8, batch=256, est=0.01, boot=5.0, idle=5.0))
     source = (f"4 × {MACHINE} at ${PRICE}/node-hour, Prove's AWS prices for {REGION} of {PRICE_DATE}, "
               "each node's disk priced at 52 GB")
-    assert first == (f"plan  27 rollouts of rb-cloud@v0: 9 cells x 3 replicates on your AWS account, "
-                     f"~{cost} this run ({source}) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00"), first
+    # First run M6 (C5, C6e): the compute part is what it was, byte for byte; the line goes on to
+    # say the cap holds compute only and that the agent's own calls are not priced.
+    compute = f"~{cost} this run ({source}) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00"
+    assert first.startswith(f"plan  27 rollouts of rb-cloud@v0: 9 cells x 3 replicates on your AWS account, {compute}"), first
     lines = [line.strip() for line in plan_lines(done.out)]
     assert [next(lab for lab in LABELS if line.startswith(lab)) for line in lines] == LABELS, lines
     by = {lab: next(line for line in lines if line.startswith(lab)) for lab in LABELS}
@@ -117,8 +119,10 @@ def test_v1_the_plan_is_the_specs_block_line_for_line(w: CloudWorld) -> None:
                         by["Bundle:"]), by["Bundle:"]
     assert by["Worker view:"] == "Worker view: job 0 matches this machine"
     assert by["Traffic:"] == TRAFFIC, by["Traffic:"]
-    assert by["Cost:"] == (f"Cost: ~{cost} this run ({source}) · ledger cloud-ledger.jsonl $0 so far · "
-                           "stop $2.00 · cap $3.00"), by["Cost:"]
+    assert by["Cost:"].startswith(f"Cost: {compute}"), by["Cost:"]
+    more = by["Cost:"][len(f"Cost: {compute}"):]
+    assert "compute only" in more and "not priced" in more and "[cost]" in more and "$" not in more, by["Cost:"]
+    assert first.endswith(more), first
     assert by["Chaos:"] == "Chaos: none"
 
 

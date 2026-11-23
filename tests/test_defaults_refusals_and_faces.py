@@ -137,7 +137,11 @@ def test_diff_and_report_default_to_the_declared_failures_and_say_so(declared: t
     assert doc["events"] == ["violated"] and doc["inferred"] is True and doc["non_event"] is None
     code, out, err = run(["--store", str(store), "diff", a, b])
     assert code == 0, err
-    assert "inferred: no event was given, so the event set is violated, the failures and successes the runs declared" in out.splitlines()
+    # First run M6 (L2, M6-24): these runs hold completed and timeout, declared neither a failure
+    # nor a success, so the line goes on to name them as left out.
+    (said,) = [line for line in out.splitlines() if line.startswith("inferred: ")]
+    assert said.startswith("inferred: no event was given, so the event set is violated, the failures and successes the runs declared"), said
+    assert re.search(r"left out: completed, timeout\b", said) and "--event" in said, said
     code, out, err = run(["--store", str(store), "report", a, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(tmp_path / "one"), "--json"])
     assert code == 0, err
     assert json.loads(out)["events"] == ["violated"]

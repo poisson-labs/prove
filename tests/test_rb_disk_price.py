@@ -165,8 +165,8 @@ def test_the_plan_without_disk_gb_says_the_default_size_priced(w: CloudWorld) ->
     assert as_json.code == 0, as_json
     cloud = json.loads(as_json.out)["plan"]["cloud"]
     assert (cloud["usd_per_node_hour"], cloud["disk_gb_priced"]) == (PRICE, 52), cloud
-    assert any(line.endswith("each node's disk priced at 52 GB) · ledger ledger.jsonl $0 so far · "
-                             "stop $5.00 · cap $5.00")
+    # First run M6 (C5): the compute part is as it was, and the agent's part follows it.
+    assert any("each node's disk priced at 52 GB) · ledger ledger.jsonl $0 so far · stop $5.00 · cap $5.00" in line
                for line in json.loads(as_json.out)["plan"]["lines"]), as_json.out
 
 
