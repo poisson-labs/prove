@@ -119,6 +119,13 @@ them against this page.
 Exit 4 belongs to a check the user asked for, never to a result the user did not ask to gate
 on.
 
+## Dated notes
+
+- 2026-11-23, rule 10's dollars: a rate a person declared is printed as they wrote it, not cut to
+  two significant digits. Poisson Prove prints what a sweep spec declares one rollout costs this
+  way (`800 rollouts at $0.0274 each`), so the count times the rate gives the amount printed
+  beside it. The amount itself is printed by rule 10.
+
 ## The terminal app
 
 A tool may open a full-screen app when its command is run with no verb on a terminal. The rules
