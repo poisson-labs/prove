@@ -210,7 +210,7 @@ and is resumable. A run's first lines and its last:
 
 <!-- docs-check: skip: four lines of a run's event log, as the store holds them -->
 ```text
-{"schema": "poisson.run-event/1", "at": "2026-11-08T16:13:50.931507Z", "kind": "planned", "detail": {"run_id": "20261108T161350Z-e76a", "rollouts": 1746, "backend": "local", "cost": "$0 (local)"}}
+{"schema": "poisson.run-event/1", "at": "2026-11-08T16:13:50.931507Z", "kind": "planned", "detail": {"run_id": "20261108T161350Z-e76a", "rollouts": 1746, "backend": "local", "cost": "$0 (prove.toml declares that a rollout costs nothing; this machine adds nothing)"}}
 {"schema": "poisson.run-event/1", "at": "2026-11-08T16:13:50.931649Z", "kind": "started", "detail": {"run_id": "20261108T161350Z-e76a"}}
 {"schema": "poisson.run-event/1", "at": "2026-11-08T16:13:50.931703Z", "kind": "progress", "detail": {"done": 1, "kept": 1, "errored": 0, "total": 1746}}
 {"schema": "poisson.run-event/1", "at": "2026-11-08T16:13:52.008688Z", "kind": "finished", "detail": {"status": "complete", "kept": 1746}}

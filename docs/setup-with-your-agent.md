@@ -36,6 +36,17 @@ The prompt it prints, and saves in each `prompt.txt`:
 Use the poisson-prove-setup skill in this repository: set Poisson Prove up for me to review, then stop.
 ```
 
+The skill has your agent write your cases and nothing more to compare. To compare more than your
+cases, add it to the prompt in your own words, with the values you want:
+
+<!-- docs-check: skip: the prompt you give your coding agent, not a command -->
+```text
+Use the poisson-prove-setup skill in this repository: set Poisson Prove up for me to review, then stop. Also compare temperature 0 and 0.7.
+```
+
+`init --agent` says so on a line of its own under the prompt:
+`more  to compare more than your cases, add it to the prompt in your own words`.
+
 - An existing file is refused, naming each; `--force` replaces those four files and nothing else.
 - `--repo DIR` writes into another folder; `--print` prints the skill and writes nothing. When
   `DIR` is another folder than the one you are in, one more line says where to start your coding
@@ -51,7 +62,9 @@ this folder: a stand-in that calls no model and needs no key and no network. Run
 `demo.md` it comes with says what to change between the two sweeps. The one call of step 6 costs
 nothing there: the demo calls no model. With no coding agent either,
 `poisson-prove init --demo --with-setup` also writes the two files your agent would, and
-`poisson-prove sweep` runs them as they are.
+`poisson-prove sweep` runs them as they are. That spec carries a `[cost]` table with
+`usd_per_rollout = 0`, which declares that a rollout costs nothing, so the demo's plan reads `$0`;
+Prove wrote it, with the tickets and a temperature as its two axes.
 
 For an agent on a real model,
 [`examples/your-first-real-agent/`](https://github.com/poisson-labs/prove/tree/main/examples/your-first-real-agent)
@@ -70,8 +83,14 @@ Seven steps, in order. The skill says each in full; here is what each is for.
    `rollout(cfg, seed)`: it runs the case `cfg` names, maps how it ended to an outcome, and returns
    an `Episode` with the case's id in `meta`. It calls nothing when it is imported and reads no
    key; your code reads its own keys, as it does today.
-3. **Write the sweep spec.** `prove.toml` with the target, the conditions worth comparing as axes,
-   and the cases as one axis of their own.
+3. **Write the sweep spec.** `prove.toml` with the target and the cases as one axis of their own,
+   and one more axis only for each thing you asked to compare, with the values you named. It adds
+   no other axis, and never one over the model, the provider or a setting that changes what a
+   call is billed at (the temperature, the reasoning effort, a token limit) unless you asked for
+   it: every value of an axis multiplies the rollouts, and those are the axes that also change
+   what each one costs. For an agent that calls no model it also writes a `[cost]` table with
+   `usd_per_rollout = 0`; it never writes another figure, since what a rollout costs is yours to
+   declare ([the sweep spec](sweep-spec.md#cost)).
 4. **Declare the outcomes.** A `[declare]` table: every outcome the wrapper can return, and which
    are failures and which successes.
 5. **Run the check.** `poisson-prove sweep --dry-run`. If the design is too small, it writes the
@@ -93,11 +112,20 @@ Seven steps, in order. The skill says each in full; here is what each is for.
      `not ready: <what failed, quoted>`;
    - each file it wrote and why;
    - each axis, with its values and one line on why those values;
+   - axes I did not add: up to three things your code shows could vary and it left out, each with
+     the values it would take, the factor it would multiply the rollouts by, and how to add it
+     (ask again naming it, or add its `[axes.NAME]` table and run `poisson-prove sweep --dry-run`);
+     "none" when your code shows nothing else;
    - the last output of the check and of the call, as printed;
-   - what you must confirm: the axes, the outcomes and their kinds, the replicates and what they
-     will cost (it names the model calls one rollout makes when your code shows them, and says
-     "none: this agent calls no model" when there are none), and how endings map to outcomes;
-   - the whole loop, each command in its own block, for you to run.
+   - what you must confirm: the axes, the outcomes and their kinds, how endings map to outcomes,
+     and the replicates and what they will cost. The cost item has a fixed shape: the plan's
+     headline as printed; the rollouts of one sweep and of the loop, which is two sweeps; the
+     model calls one rollout makes, as your code shows them, or "none: this agent calls no
+     model"; the trial's `model calls` and `tokens` lines, when it printed them; the sentence
+     "Prove's plan does not price your agent's own calls unless `prove.toml` declares `[cost]`";
+     and how to declare it. Your coding agent gives no dollar figure of its own;
+   - the whole loop, each command in its own block, for you to run, and after it which outcomes
+     the comparison reads and which it leaves out.
 
 Its rules: it never runs a sweep itself, only the check with `--dry-run` and the one call with
 `--try`; it passes `--yes` to that one call alone, and only after you said yes to it, so nothing
@@ -127,6 +155,19 @@ poisson-prove sweep --note "before: <what this version is>"
 poisson-prove sweep --pair-with latest --note "<what you changed>"
 poisson-prove diff
 ```
+
+`poisson-prove diff` with no event named compares the outcomes your `[declare]` table names a
+failure or a success, and leaves out the ones it names neither. The hand-over says which are
+compared and which are left out, with one block for each outcome left out, and `diff` says the
+same on its `inferred:` line:
+
+<!-- docs-check: skip: needs the two files your coding agent writes for your own agent -->
+```bash
+poisson-prove diff --event guardrail_blocked
+```
+
+When every declared outcome is a failure or a success, the hand-over says "every declared outcome
+is compared" and gives no such block.
 
 The command line says the same as you go: a complete first sweep of your own agent ends with
 `then  change your agent; the next sweep runs it on the same seeds` and a `next:` that is the

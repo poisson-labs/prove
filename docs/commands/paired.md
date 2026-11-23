@@ -113,10 +113,10 @@ arms are two runs on the same seeds, so pair by pair they sent the same request:
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep grading.toml --yes --name grade-a
-plan  1,200 rollouts of grader: 6 cells x 200 replicates on local, $0 (local)
+plan  1,200 rollouts of grader: 6 cells x 200 replicates on local, your agent's own calls not priced
 …
 $ poisson-prove sweep grading.toml --yes --pair-with grade-a --name grade-b
-plan  1,200 rollouts of grader: 6 cells x 200 replicates on local, $0 (local)
+plan  1,200 rollouts of grader: 6 cells x 200 replicates on local, your agent's own calls not priced
 …
 ```
 

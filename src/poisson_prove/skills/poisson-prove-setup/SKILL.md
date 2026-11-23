@@ -47,7 +47,7 @@ Poisson Prove runs the person's agent many times under conditions they choose, o
 
 1. **Find the agent's entry point.** Read the code; run nothing. Find the function or command that runs one case end to end, where the model is called and through which client, what varies between cases (the prompt, the model, the tools, the temperature, retries, the set of cases), and how a case can end (a success, a refusal, an error of some type, a time-out, a guard).
 2. **Write the rollout wrapper.** Write `prove_rollout.py` at the repository root with `def rollout(cfg: dict, seed: int) -> Episode`. It runs the entry point on the case `cfg` names, with the other values in `cfg` and with `seed`; it maps how the case ended to an outcome name; and it returns `poisson_prove.Episode(outcome=..., t=..., horizon=..., meta={"case_id": ...})`, the id of the case it ran in `meta["case_id"]` on every ending. It picks the case from `cfg`, never from `seed`. It imports nothing that calls the model when it is imported, reads no key itself (the agent's own code reads its keys as it does today), and does nothing else.
-3. **Write the sweep spec.** Write `prove.toml` at the repository root with `target = "prove_rollout:rollout"`, a `target_id`, `t_unit`, and the conditions worth varying as `[axes.NAME]` tables: what the code shows varies and a person would want to compare, two or three axes of two to four values each, besides the cases. Each case is its own sweep axis: add one axis whose values are the case ids, as many as there are, so that one condition never runs more than one case (Prove refuses to compare a condition whose episodes report different case ids). Set `replicates = 20` for now; the check says what it should be.
+3. **Write the sweep spec.** Write `prove.toml` at the repository root with `target = "prove_rollout:rollout"`, a `target_id`, `t_unit`, and the conditions as `[axes.NAME]` tables. Each case is its own sweep axis: add one axis whose values are the case ids, as many as there are, so that one condition never runs more than one case (Prove refuses to compare a condition whose episodes report different case ids). Add one more axis for each thing the person asked to compare, in their own words in the prompt, with the values they named. Add no other axis. Never add an axis over the model, the provider or any setting that changes what a call is billed at (the temperature, the reasoning effort, a token limit), unless the person asked for it. What else the code shows could vary goes in the hand-over, under "Axes I did not add", and not in the spec. For an agent that calls no model, also write a `[cost]` table with `usd_per_rollout = 0`, which says a rollout costs nothing; never write another figure, and for an agent that calls a model write no `[cost]` table: what a rollout costs is the person's to declare. Set `replicates = 20` for now; the check says what it should be.
 4. **Declare the outcomes.** Add a `[declare]` table: `outcomes`, every outcome name the wrapper can return; then `failures` and `successes`, each from what the code shows. No outcome is in both.
 5. **Run the check.** Run it from the repository root, as "The check" below shows. If it refuses because the design is too small, write the number its `next:` line gives after `--replicates` into `replicates` in `prove.toml`, and run it again. If it refuses for anything else, fix what the `error:` line names. When it passes, go on to step 6.
 6. **Call it once.** The check imports the wrapper and never calls it, so a wrapper that fails on every call still passes the check. So ask the person, in these words: "Next I call your agent once, on one real case, at your agent's own cost (its model calls for one case). May I?" Wait for the answer. On a no, or with no answer, make no call: hand over as not ready, saying the call was not made. Only on a yes, run:
@@ -88,9 +88,10 @@ Stop here and tell the person, in this order:
 1. A first line that says whether the setup is ready, in one of two forms: `ready: the check passed and one real call returned "<outcome>"`, with the outcome the call printed, or `not ready: <what failed, quoted>`, with the `error:` line of the check or of the call as printed, or "the call was not made" when the person said no.
 2. Each file you wrote, with one line on why it is there.
 3. Each axis in `prove.toml`, with its values and one line on why those values.
-4. The last output of the check and of the call, exactly as printed. If the call was not made, say so.
-5. What they must confirm before running anything for real (the list below).
-6. The whole loop, for them to run themselves, each command in its own block. When the first line says the setup is not ready, they first fix what it names and make the call themselves, until it returns an outcome:
+4. Axes I did not add: up to three things the code shows could vary and you left out of the spec, each with the values it would take, the factor it would multiply the rollouts by (an axis of two doubles them), and how to add it: ask again naming it, or add its `[axes.NAME]` table and run `poisson-prove sweep --dry-run`. When the code shows nothing else that could vary, say "none".
+5. The last output of the check and of the call, exactly as printed. If the call was not made, say so.
+6. What they must confirm before running anything for real (the list below).
+7. The whole loop, for them to run themselves, each command in its own block. When the first line says the setup is not ready, they first fix what it names and make the call themselves, until it returns an outcome:
 
    ```text
    poisson-prove sweep --try
@@ -114,13 +115,21 @@ Stop here and tell the person, in this order:
    poisson-prove diff
    ```
 
+   That comparison reads what `[declare]` names: it compares each outcome declared a failure or a success, and leaves out each outcome declared neither. Say by name which outcomes it compares and which it leaves out, and give one block for each outcome it leaves out, with the outcome's name where this one says NAME:
+
+   ```text
+   poisson-prove diff --event NAME
+   ```
+
+   When every declared outcome is a failure or a success, say "every declared outcome is compared" and give no such block.
+
 Do not run these commands for them: the call above was the one command you ran for real, and the loop is the person's to run.
 
 What the person must confirm:
 
 - The axes and their values: are these the conditions they want compared, and is every case its own value?
 - The outcomes and their kinds: is each failure a failure and each success a success?
-- The replicates, and what running them will cost: each rollout runs the agent once. Name the model calls one rollout makes, when the code shows them; for an agent that calls no model, say "none: this agent calls no model".
+- The replicates, and what running them will cost, as these six things in this order: the plan's headline as the check printed it; the rollouts of one sweep and of the loop, which is two sweeps; the model calls one rollout makes, as the code shows them, or "none: this agent calls no model"; the trial's `model calls` and `tokens` lines as printed, when it printed them; the sentence "Prove's plan does not price your agent's own calls unless `prove.toml` declares `[cost]`"; and how to declare it, a `[cost]` table in `prove.toml` whose `usd_per_rollout` is what one rollout costs them in dollars. Give no dollar figure of your own. When the person asked for an axis over the model or a billed setting, name it here as the axis that changes what a call costs.
 - How the wrapper maps each way a case can end to an outcome.
 
 ## Words Prove uses

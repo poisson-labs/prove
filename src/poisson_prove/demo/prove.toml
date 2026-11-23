@@ -17,3 +17,8 @@ values = [0.0, 0.7]
 outcomes = ["resolved", "unresolved", "timeout"]
 failures = ["unresolved", "timeout"]
 successes = ["resolved"]
+
+# What one rollout costs at the agent's own providers, in dollars. The demo bot calls no model,
+# so a rollout costs nothing, and the plan reads $0 for that stated reason.
+[cost]
+usd_per_rollout = 0

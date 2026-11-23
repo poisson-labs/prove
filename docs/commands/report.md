@@ -105,6 +105,10 @@ examples:
   the heatmap is one condition; the refusal names the axis left free.
 - `--event NAME`, `--method`, `--q Q` and `--methods all` are `diff`'s: the events, the
   per-condition test, the false discovery rate of the flags, and the other two methods' table.
+  With no `--event`, the `inferred:` line names the outcomes the report left out, as `diff`'s
+  does: those the runs declare or hold that are neither a failure nor a success. It is printed,
+  and written into `report.md` and `receipt.html`; a report of one run names them the same way.
+  `--event NAME` reports one of them.
 - `--permutations N`, `--seed N`, `--by KEY`, `--max-group-mde FRACTION` and `--depth N` set the
   layered report as they do for `diff` (the group-level limit defaults to 0.200, the constant
   `--max-mde` of `sweep` uses): see [The layered report](../concepts/the-layered-report.md).

@@ -179,6 +179,18 @@ def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+#: How many bytes 0.2.1's example spec had (their digest is ``SHA_EXAMPLE``).
+EXAMPLE_BYTES = 681
+
+
+def is_example(text: bytes) -> bool:
+    """First run M6 (C11, M6-4): the example's spec is 0.2.1's bytes, then one thing more, a
+    ``[cost]`` table declaring that a rollout costs nothing. What follows 0.2.1's bytes is read
+    by what it means, so its comment's wording is the build's."""
+    was, more = text[:EXAMPLE_BYTES], text[EXAMPLE_BYTES:]
+    return hashlib.sha256(was).hexdigest() == SHA_EXAMPLE and tomllib.loads(more.decode("utf-8")) == {"cost": {"usd_per_rollout": 0}}
+
+
 def loaded(path: Path) -> dict[str, Any]:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
@@ -647,7 +659,9 @@ def test_w5_init_off_a_terminal_writes_what_0_2_1_wrote_and_asks_nothing(
 ) -> None:
     done = run(w, "init", *args)
     assert done.code == 0, done
-    assert sha(w.root / name) == digest, "init wrote other bytes than 0.2.1 did"
+    # First run M6: the example's spec gains its [cost] table; the other two are 0.2.1's bytes.
+    written = (w.root / name).read_bytes()
+    assert is_example(written) if args == ("--example",) else sha(w.root / name) == digest, "init wrote other bytes than 0.2.1 did"
     assert done.err == "", done
     if args == ("--example",):
         assert done.out == INIT_OUT, done
@@ -666,7 +680,7 @@ def test_w5_init_asks_only_when_stdin_and_stderr_are_both_terminals_and_no_json(
         assert done.out == INIT_OUT, done
     assert done.code == 0, done
     assert "where should sweeps run" not in done.out + done.err, done
-    assert sha(w.spec) == SHA_EXAMPLE
+    assert is_example(w.spec.read_bytes())
 
 
 def test_w5_in_a_terminal_init_asks_the_question_and_enter_keeps_this_machine(w: CloudWorld) -> None:
@@ -674,12 +688,12 @@ def test_w5_in_a_terminal_init_asks_the_question_and_enter_keeps_this_machine(w:
     assert done.code == 0, done
     assert flat(done.err) == flat(QUESTION), done.err
     assert done.out == INIT_OUT, done
-    assert sha(w.spec) == SHA_EXAMPLE, "Enter changed what init writes"
+    assert is_example(w.spec.read_bytes()), "Enter changed what init writes"
 
 
 def test_w5_answer_1_is_this_machine_too(w: CloudWorld) -> None:
     done = asked(w, "init", "--example", typed="1\n")
-    assert done.code == 0 and done.out == INIT_OUT and sha(w.spec) == SHA_EXAMPLE, done
+    assert done.code == 0 and done.out == INIT_OUT and is_example(w.spec.read_bytes()), done
 
 
 def test_w5_answer_3_asks_one_question_a_line_checks_writes_the_table_and_names_the_dry_run(w: CloudWorld) -> None:
@@ -696,7 +710,7 @@ def test_w5_answer_3_asks_one_question_a_line_checks_writes_the_table_and_names_
     assert SIGNED_IN in out and WROTE_CLOUD in out and out.index(SIGNED_IN) < out.index(WROTE_CLOUD), done
     assert done.nexts == ["next: poisson-prove sweep --dry-run"] and out[-1] == "  next: poisson-prove sweep --dry-run", done
     text = w.spec.read_bytes()
-    assert hashlib.sha256(text[: text.index(b"\n[cloud]\n")]).hexdigest() == SHA_EXAMPLE, "init changed the spec's own bytes"
+    assert is_example(text[: text.index(b"\n[cloud]\n")]), "init changed the spec's own bytes"
     assert loaded(w.spec)["cloud"] == DEFAULT_CLOUD, loaded(w.spec)["cloud"]
     assert ACCOUNT not in done.out + done.err, done
 
@@ -740,9 +754,9 @@ def test_w5_runs_on_answers_the_question_on_the_command_line(
     text = w.spec.read_bytes()
     doc = loaded(w.spec)
     if runs_on == "local":
-        assert sha(w.spec) == SHA_EXAMPLE and done.out == INIT_OUT, done
+        assert is_example(w.spec.read_bytes()) and done.out == INIT_OUT, done
         return
-    assert hashlib.sha256(text[: text.index(f"\n[{runs_on}]\n".encode())]).hexdigest() == SHA_EXAMPLE
+    assert is_example(text[: text.index(f"\n[{runs_on}]\n".encode())])
     if runs_on == "cloud":
         assert doc["cloud"] == DEFAULT_CLOUD and WROTE_CLOUD in done.out.splitlines(), done
     else:
@@ -802,7 +816,7 @@ def test_w5_pretty_asks_the_same_question(w: CloudWorld) -> None:
     assert run_.code == 0, shown
     for words in ("1 this machine (default)", "2 Modal", "3 your cloud account (AWS)"):
         assert words in shown, shown
-    assert sha(w.spec) == SHA_EXAMPLE
+    assert is_example(w.spec.read_bytes())
 
 
 def test_w5_on_a_terminal_with_stdin_not_one_init_asks_nothing(w: CloudWorld) -> None:
@@ -811,7 +825,7 @@ def test_w5_on_a_terminal_with_stdin_not_one_init_asks_nothing(w: CloudWorld) ->
     assert run_.code == 0, shown
     assert "where should sweeps run" not in shown, shown
     assert [line.rstrip() for line in shown.splitlines() if line.strip()] == INIT_OUT.splitlines(), shown
-    assert sha(w.spec) == SHA_EXAMPLE
+    assert is_example(w.spec.read_bytes())
 
 
 # ---------- W6: what is not offered ----------

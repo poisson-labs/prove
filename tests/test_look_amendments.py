@@ -32,7 +32,9 @@ CHANGES = json.loads((FIXTURES / "cli-look" / "amendments.json").read_text(encod
 STYLE = ROOT / "src" / "poisson_prove" / "_ui_bundle" / "style.css"
 #: The file before the amendments.
 BEFORE_SHA256 = "92e71488c2824c056252be9a7b340e7fc138d15359fbcb7431bcfc6fa267d85f"
-TYPE_RULE, BANNER = CHANGES
+# First run M6 (M6A-3, ruled 2026-11-23): a third amendment, the dated note that a declared rate
+# is printed as written, which sits before the terminal app's section.
+TYPE_RULE, BANNER, RATE_NOTE = CHANGES
 SANS = "system-ui"
 MONO = "ui-monospace"
 
@@ -56,12 +58,15 @@ def test_the_fixture_is_the_two_amendments_of_the_file_before() -> None:
     """On the file as it was, each old text occurs once: the fixture can be applied. This holds the
     fixture to the file's history: green before the change and after it."""
     undone = _look().replace(BANNER["new"], "").replace(TYPE_RULE["new"], TYPE_RULE["old"])
+    # First run M6: the dated note is taken back out too, and it sits before the section it names.
+    assert undone.count(RATE_NOTE["new"] + RATE_NOTE["before"]) == 1
+    undone = undone.replace(RATE_NOTE["new"], "")
     assert _sha256(undone) == BEFORE_SHA256
     assert undone.count(TYPE_RULE["old"]) == 1
     assert undone.count(BANNER["before"]) == 1
 
 
-@pytest.mark.parametrize("change", CHANGES, ids=["type-rule", "banner"])
+@pytest.mark.parametrize("change", CHANGES, ids=["type-rule", "banner", "rate-note"])
 def test_each_amendment_is_in_the_file_once(change: dict[str, str]) -> None:
     assert _look().count(change["new"]) == 1, change["what"]
 

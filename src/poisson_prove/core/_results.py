@@ -204,6 +204,8 @@ class RunDetail(Result):
     events: tuple[str, ...] = ()
     non_event: str | None = None
     inferred: bool = False
+    #: The outcomes the run declares or holds that a defaulted event set does not read.
+    left_out: tuple[str, ...] = ()
     horizon: float = 0.0
     shares: Mapping[str, Any] = field(default_factory=dict)
     design: Mapping[str, Any] | None = None
@@ -218,9 +220,11 @@ class RunDetail(Result):
         if not self.inferred:
             return None
         if self.non_event is None:
+            from poisson_prove.diff import left_out_clause
+
             return (
                 f"inferred: no event was given, so the event set is {', '.join(self.events)}, "
-                "the failures and successes the run declared"
+                "the failures and successes the run declared" + left_out_clause(self.left_out)
             )
         return (
             f"inferred: no event was given, so the event set is {', '.join(self.events)}; "

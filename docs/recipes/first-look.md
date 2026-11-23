@@ -11,10 +11,10 @@ $ poisson-prove init --example
 ok  wrote prove.toml: a sweep of the keyless mock agent, 9 conditions x 194 replicates
   next: poisson-prove sweep
 $ poisson-prove sweep --yes
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
 $ poisson-prove sweep --yes --target poisson_prove.examples.mock_agent:rollout_patched --pair-with latest
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
   next: poisson-prove diff
 ```
@@ -39,7 +39,7 @@ trade  timeout: … safer, … worse · violated: … safer, … worse (paired t
   limits  the smallest change one condition alone would be flagged for, 4 times in 5, …
   intervals  on each condition's change: Tango at 97.5%, …
 …
-inferred: no event was given, so the event set is timeout, violated, the failures and successes the runs declared
+inferred: no event was given, so the event set is timeout, violated, the failures and successes the runs declared; left out: completed, declared neither (compare one with --event NAME)
 …
   next: poisson-prove report --x task_id --y tool_fail_rate
 ```
@@ -60,7 +60,9 @@ computed. `fragility` says how many episodes would have to have ended differentl
 change.
 
 **The events.** `inferred` says which outcomes were compared: none was named, so the failures the
-spec's `[declare]` table names, `timeout` and `violated`.
+spec's `[declare]` table names, `timeout` and `violated`. It also names what was left out,
+`completed`, which the spec declares neither a failure nor a success; `--event completed`
+compares it.
 
 **The table.** One row per condition and event, the conditions in the order of their axis values
 and each condition's two events together: each run's share of episodes that ended in the event

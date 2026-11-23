@@ -25,14 +25,15 @@ pip install "poisson-prove[agent]"
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --dry-run
-plan  1,200 rollouts of first-real-agent: 6 cells x 200 replicates on local, $0 (local)
+plan  1,200 rollouts of first-real-agent: 6 cells x 200 replicates on local, your agent's own calls not priced
   target  agent:rollout (imports, takes cfg and seed)
   outcomes  failures: wrong; successes: correct; neither: api_error
 …
 ```
 
-The `$0` is this machine's compute. The model calls are on your OpenAI bill: 1,200 short requests
-per sweep to `gpt-4.1-mini`.
+The plan gives no dollar figure: this machine adds nothing, and your agent's own calls are not
+priced, since the spec declares no `[cost]`. The model calls are on your OpenAI bill: 1,200 short
+requests per sweep to `gpt-4.1-mini`.
 
 ## Run it, with your key
 

@@ -1012,6 +1012,9 @@ class MultiDiffResult:
     inferred: bool
     non_event: str | None
     coverage: pd.DataFrame | None = None
+    #: The outcomes the two runs declare or hold that the comparison did not read, in sorted
+    #: order: set only when no event was named and the events came from the runs' declarations.
+    left_out: tuple[str, ...] = ()
     # The interval on the delta. All six defaulted: the report's tests build this result by
     # hand from keywords, and an
     # undefaulted field breaks every one of them. ``n_rejected`` is the family's BH rejection
@@ -1207,7 +1210,7 @@ class MultiDiffResult:
         if self.non_event is None:
             return (
                 f"inferred: no event was given, so the event set is {events}, the failures and "
-                "successes the runs declared"
+                "successes the runs declared" + left_out_clause(self.left_out)
             )
         return (
             f"inferred: no event was given, so the event set is {events}; the non-event is "
@@ -1323,6 +1326,9 @@ class MultiDiffResult:
     def to_json(self) -> dict[str, Any]:
         out: dict[str, Any] = {name: _native(getattr(self, name)) for name in _MULTI_SUMMARY_FIELDS}
         out["events"] = list(self.events)
+        if self.left_out:
+            # Optional, and present only when an outcome was left out (poisson-prove.diff/1).
+            out["left_out"] = list(self.left_out)
         out["by_event"] = {e: self.by_event[e].to_json() for e in self.events}
         out["trades"] = [
             {col: _native(value) for col, value in record.items()}
@@ -2170,12 +2176,15 @@ def multi_diff(
 
     inferred = events is None
     non_event: str | None = None
+    left_out: tuple[str, ...] = ()
     if events is None:
         # The failures and successes the runs declare, when they declare any; otherwise every
         # outcome present but the most frequent.
         event_set = declared_events(manifest_a, manifest_b)
         if not event_set:
             event_set, non_event = infer_events(a, b)
+        else:
+            left_out = outcomes_left_out(event_set, (manifest_a, manifest_b), (a, b))
     else:
         event_set = tuple(dict.fromkeys(str(e) for e in events))
         if not event_set:
@@ -2353,6 +2362,7 @@ def multi_diff(
         trades=trades,
         inferred=inferred,
         non_event=non_event,
+        left_out=left_out,
         coverage=coverage,
         intervals=intervals,
         interval_level=interval_level,
@@ -2369,6 +2379,31 @@ def multi_diff(
         errors_differ=tuple(errors_differ),
         fragility_search=search,
     )
+
+
+def outcomes_left_out(
+    events: Sequence[str],
+    manifests: Sequence[RunManifest | None],
+    frames: Sequence[pd.DataFrame],
+) -> tuple[str, ...]:
+    """The outcomes these runs declare or hold that are not in ``events``, in sorted order (the
+    order a manifest holds its declared outcomes in). A comparison whose events were the
+    declared failures and successes names them, so the reader knows what it did not read."""
+    names: set[str] = set()
+    for manifest in manifests:
+        if manifest is not None and manifest.declared is not None:
+            names.update(str(name) for name in manifest.declared.outcomes)
+    for frame in frames:
+        names.update(str(name) for name in frame["outcome"].dropna().unique())
+    return tuple(sorted(names - {str(e) for e in events}))
+
+
+def left_out_clause(left_out: Sequence[str]) -> str:
+    """What an ``inferred:`` line goes on to say when outcomes were left out; empty when none
+    was, so the line is then what it always was."""
+    if not left_out:
+        return ""
+    return f"; left out: {', '.join(left_out)}, declared neither (compare one with --event NAME)"
 
 
 def declared_events(*manifests: RunManifest | None) -> tuple[str, ...]:

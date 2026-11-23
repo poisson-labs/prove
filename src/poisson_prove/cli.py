@@ -627,7 +627,7 @@ def _build_parser(io: _IO) -> _Parser:
     _add_json_option(sweep, "the plan and the result")
     remote = sweep.add_argument_group(
         "remote backends (override the [modal] table; --infra-retries, --max-cost and "
-        "--est-seconds also override [cloud])"
+        "--est-seconds also override [cloud]; --max-cost holds a sweep on this machine too)"
     )
     remote.add_argument(
         "--concurrency", type=int, metavar="N", help="containers at once (default: the table's)"
@@ -639,7 +639,8 @@ def _build_parser(io: _IO) -> _Parser:
         "--max-cost",
         type=float,
         metavar="USD",
-        help="refuse before anything starts when the estimate is above this (default: no cap)",
+        help="refuse before anything starts when what the plan priced is above this: the "
+        "compute estimate, and your agent's own calls when [cost] declares them (default: no cap)",
     )
     remote.add_argument(
         "--est-seconds",
@@ -2118,7 +2119,7 @@ def _cmd_try(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     _notes_of(io, planned)
     if not ns.json:
         io.verdict("try", core.trial_sentence(planned))
-        io.detail("cost", core.TRY_COST)
+        io.detail("cost", core.trial_cost(planned))
     if not ns.yes and not io.inp.isatty():
         raise _Usage(
             "stdin is not a terminal, so the question before the call cannot be asked; --yes "
@@ -2345,6 +2346,8 @@ def _cmd_init_agent(ns: argparse.Namespace, io: _IO, state: _State) -> int:
         # The skill is read from the folder the coding agent is opened in.
         io.detail("open", f"your coding agent in {ns.repo}")
     io.detail("prompt", written.payload["prompt"])
+    # The prompt is where the person says what else to compare; the skill adds no axis unasked.
+    io.detail("more", "to compare more than your cases, add it to the prompt in your own words")
     for line in written.next:
         io.next(line)
     return 0

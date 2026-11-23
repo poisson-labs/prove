@@ -47,6 +47,7 @@ max_observation_bytes = 16384
 | `[axes.<name>]` | table, one per axis | at least one is required | a condition is one value of every axis; the grid is every combination |
 | `scenarios` | array of tables, each headed by the table name in double brackets | none | conditions added to the grid as written, one table each, with any keys |
 | `[declare]` | table | none | what the run expects: its outcomes and their kinds, its steps and gates |
+| `[cost]` | table | none | what one rollout costs at your agent's own providers, as you declare it; without it the plan does not price your agent's calls |
 | `[capture]` | table | no capture | store the OpenTelemetry spans of a traced agent with each episode |
 | `[chaos]` | table | no faults | inject a fault into the target's HTTP calls |
 | `[modal]` | table | Modal's defaults below | how a `--backend modal` sweep runs |
@@ -99,6 +100,56 @@ table that declares nothing. Without `failures` or `successes` a comparison says
 an outcome, never `worse` and `safer`, and the plan says so. What `steps` and `gates` report is in
 [What a declaration checks](what-a-declaration-checks.md).
 
+## `[cost]`
+
+What one rollout costs at your agent's own providers, as you declare it. Prove cannot see what
+your agent spends and holds no price of any model, so the plan prices your agent's own calls only
+by this figure. Without the table the plan says they are not priced, and a sweep on this machine
+shows no dollar figure.
+
+| key | type | default | what it is |
+|---|---|---|---|
+| `usd_per_rollout` | number, 0 or more | no default, required when the table is present | what one rollout costs, in dollars, as you measured or reckon it |
+| `basis` | one line of 1 to 200 characters | none | where the figure came from; the plan prints it back beside the figure |
+
+<!-- docs-check: run -->
+```toml
+[cost]
+usd_per_rollout = 0.0016
+basis = "costliest conversation measured on Haiku 5.5, 2026-11-21"
+```
+
+- **What the plan does with it.** It multiplies `usd_per_rollout` by the rollouts the command
+  will run and prints the product, the count, the rate as you wrote it and the words
+  `declared in prove.toml`, with the `basis` when you gave one:
+  `~$2.43 of your agent's own calls (1,520 rollouts at $0.0016 each, declared in prove.toml: …)`.
+  The figure is yours; Prove multiplies and says whose it is. It is the same on this machine,
+  Modal and a cloud account, where it follows the compute estimate. `sweep --try` gives the figure
+  for its one rollout.
+- **Declare the costliest condition.** One figure prices every rollout alike. When conditions
+  differ in price (a model axis you asked for, a longer case), declare what the costliest one
+  costs, so the product is an upper bound.
+- **`usd_per_rollout = 0`** declares that a rollout costs nothing, for an agent that calls no
+  model. It is the only way a plan reads `$0`, and the plan says it is declared. The spec
+  `init --example` writes and the demo's declare it.
+- **From the trial's tokens to a figure.** When your rollout returns a trace, `sweep --try` prints
+  the model calls of one rollout and their tokens. Look up your provider's prices and multiply:
+  4,812 tokens in at $1.00 a million and 391 out at $5.00 a million are
+  4,812 × 0.000001 + 391 × 0.000005 = $0.0068, so `usd_per_rollout = 0.0068`. Those prices are an
+  example, and the trial ran one condition; use your provider's, and the costliest condition's
+  tokens. Prove does not do this multiplication, since it would need a price list that goes out
+  of date.
+- **What the cap holds.** With `[cost]` declared, `--max-cost` (and `max_cost` under `[modal]` or
+  `[cloud]`) holds the compute estimate plus the declared calls; on this machine, where compute is
+  nothing, `--max-cost` holds the declared calls alone. Without `[cost]` the cap holds compute
+  only, and on this machine it is refused for having nothing to hold.
+
+Any other key, a figure that is negative, not finite, in quotes or `true`, and a `basis` that is
+empty, longer than 200 characters or more than one line are refused before anything runs, naming
+the key. Like `[declare]`, the table is not part of the sweep's identity: a spec that gains it
+still pairs with the runs made before, and no run's manifest records the figure. Prove 0.4.0 and
+earlier refuse a spec that has a `[cost]` table.
+
 ## `[capture]`
 
 Turns on OpenTelemetry capture for a traced agent: the instrumentors you name are switched on in
@@ -144,7 +195,7 @@ otherwise, and `poisson-prove where modal` writes it. Every key is optional; the
 | `episode_timeout` | seconds, or none | `300` | the limit on one episode inside a container |
 | `infra_retries` | integer | `2` | retries of a batch that failed for an infrastructure reason |
 | `max_rollouts` | integer, or none | no limit | stop after this many and leave the run partial |
-| `max_cost` | dollars, or none | no cap | refuse before anything starts when the estimate is above it, or when there is no estimate to hold against it |
+| `max_cost` | dollars, or none | no cap | refuse before anything starts when the estimate is above it, or when there is no estimate to hold against it. It holds the compute estimate, plus your agent's calls when `[cost]` declares them; without `[cost]` the plan says `compute only` beside it |
 | `est_seconds_per_episode` | seconds, or none | no estimate | the time one episode takes, for the cost estimate |
 | `app_name` | string | `"poisson-prove"` | the Modal app's name |
 | `secrets` | list of names | none | Modal secrets mounted on the function, by name; Prove never reads their values |
@@ -178,7 +229,7 @@ cap or a cluster. [Backends](backends.md#your-cloud-account) says what it needs.
 | `nodes` | integer | no default, required | how many nodes Prove starts |
 | `ledger` | path | no default, required | the spend ledger, checked before the run starts and written as it goes |
 | `stop_cost` | dollars | no default, required | the spend at which the job is stopped |
-| `max_cost` | dollars, at least `stop_cost` | no default, required | the estimate above which the sweep is refused before it starts |
+| `max_cost` | dollars, at least `stop_cost` | no default, required | the estimate above which the sweep is refused before it starts: the ledger so far plus this run's compute estimate, plus your agent's calls when `[cost]` declares them; without `[cost]` the plan says `compute only` beside it |
 | `est_seconds_per_episode` | seconds | no default, required | the time one episode takes, for the estimate |
 | `max_vcpus` | integer | `nodes` × the machine's vCPUs | the ceiling: a plan whose nodes need more is refused |
 | `slots_per_node` | integer | the machine's vCPUs ÷ `func_cpu` | episodes run at once on a node |
@@ -223,7 +274,8 @@ your account from one sweep to the next: a `disk_gb` an earlier sweep set is not
 
 A region or a machine type outside the table is refused, naming the ones the table has, unless
 the spec gives `usd_per_node_hour` and `price_asof` together. The estimate is compute only: what
-your agent spends at its model provider is on that provider's bill.
+your agent spends at its model provider is on that provider's bill, and the plan prices it only
+when [`[cost]`](#cost) declares it.
 
 ### A 0.2 spec's `[burla]` table
 

@@ -1,8 +1,8 @@
 # `poisson-prove sweep`
 
 Runs every condition of a sweep spec, a number of replicates each, and stores every episode as a
-run. It prints the plan first: what will run, where, what it costs, and the smallest change in a
-condition's failure rate the design can catch. A design too small for the change you accept is
+run. It prints the plan first: what will run, where, what Prove prices of it and what it does
+not, and the smallest change in a condition's failure rate the design can catch. A design too small for the change you accept is
 refused before anything runs. On a terminal it then asks `[y/N]`; piped or in CI it needs
 `--yes`.
 
@@ -11,6 +11,10 @@ first half of the pair that `--pair-with` makes of it later. The plan gives both
 passes only when both do, so the sweep you pair with it, on the same spec and replicates, is
 never refused for its size. Both readings are planned for the worst base rate and with no credit
 for pairing, so the plan needs no pilot run: nothing is estimated from earlier data.
+
+The plan prices the compute a backend bills, which is nothing on this machine, and your agent's
+own calls only when the spec declares what a rollout costs under `[cost]`; with nothing declared
+it says they are not priced ([What the plan prices](#what-the-plan-prices) below).
 
 Where the rollouts run is the spec's to say: this machine, Modal or your own cloud account.
 `poisson-prove where` shows and changes it, and `--backend` overrides it for one run.
@@ -92,11 +96,13 @@ options:
                         (default: pretty on a terminal, plain otherwise)
   --debug               also print the traceback of an unexpected failure
 
-remote backends (override the [modal] table; --infra-retries, --max-cost and --est-seconds also override [cloud]):
+remote backends (override the [modal] table; --infra-retries, --max-cost and --est-seconds also override [cloud]; --max-cost holds a sweep on this machine too):
   --concurrency N       containers at once (default: the table's)
   --infra-retries N     retries per batch (default: the table's)
-  --max-cost USD        refuse before anything starts when the estimate is
-                        above this (default: no cap)
+  --max-cost USD        refuse before anything starts when what the plan
+                        priced is above this: the compute estimate, and your
+                        agent's own calls when [cost] declares them (default:
+                        no cap)
   --est-seconds S       seconds per episode, for the estimate (default: the
                         table's)
   --app-name NAME       the Modal app name (default: the table's)
@@ -156,8 +162,13 @@ examples:
   `--json`" below).
 - `--concurrency N`, `--infra-retries N`, `--max-cost USD`, `--est-seconds S`, `--app-name NAME`
   and `--image SECTION` override the `[modal]` table for one run; `--infra-retries`, `--max-cost`
-  and `--est-seconds` also override `[cloud]`. `--max-cost` refuses a sweep whose estimate is above
-  it before anything starts.
+  and `--est-seconds` also override `[cloud]`.
+- `--max-cost USD` holds everything the plan priced, on every backend, and refuses a sweep whose
+  estimate is above it before anything starts. On this machine that is your agent's own calls as
+  `[cost]` declares them, so a spec with no `[cost]` gives it nothing to hold and is refused. On
+  Modal and a cloud account it holds the compute estimate plus the declared calls (and, on a
+  cloud account, the ledger so far); with no `[cost]` it holds compute alone, and the cost line
+  says `compute only` beside the cap. See [What the plan prices](#what-the-plan-prices).
 - `--store PATH` is the store folder, `./prove-runs` unless `$POISSON_PROVE_STORE` says otherwise;
   `--plain` prints plain text on a terminal too; `--debug` adds the traceback of an unexpected
   failure.
@@ -169,7 +180,7 @@ examples:
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --dry-run
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
   target  poisson_prove.examples.mock_agent:rollout (imports, takes cfg and seed)
   outcomes  failures: timeout, violated
 …
@@ -182,6 +193,10 @@ the second reads it beside the sweep you will pair with it on the same seeds (th
 The paired reading counts on no agreement between the two runs of a pair, so a pair that agrees
 more than chance, as runs on shared seeds usually do, can only catch more than the plan says.
 
+The example's plan reads `$0` because its spec declares that a rollout costs nothing
+(`usd_per_rollout = 0` under `[cost]`): the mock agent calls no model. That declaration is the
+only way a plan reads `$0`.
+
 Twenty replicates per condition are too few to catch a change of 0.20, so the plan is refused,
 naming the reading that failed (the paired one when both do), with the two ways out: the fewest
 replicates that pass both readings, or the smallest larger change that admits both:
@@ -189,7 +204,7 @@ replicates that pass both readings, or the smallest larger change that admits bo
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --replicates 20 --dry-run  # exits 1
-plan  180 rollouts of mock-agent: 9 cells x 20 replicates on local, $0 (local)
+plan  180 rollouts of mock-agent: 9 cells x 20 replicates on local, $0
 …
 error: underpowered design: a sweep paired with this one would flag a change of 0.568 at its worst base rate, 0.000, and you accept 0.200
   next: poisson-prove sweep --replicates 194 --dry-run
@@ -204,12 +219,12 @@ change, and the sweep paired with it asks for the default 0.20:
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --yes --replicates 100 --max-mde 0.3 --name short-baseline
-plan  900 rollouts of mock-agent: 9 cells x 100 replicates on local, $0 (local)
+plan  900 rollouts of mock-agent: 9 cells x 100 replicates on local, $0
 …
 done  900 rollouts in run "short-baseline" (complete) in … s
 …
 $ poisson-prove sweep --pair-with short-baseline --dry-run  # exits 1
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
 error: underpowered design: run "short-baseline" has 100 replicates, and a sweep paired with it needs 194 on both sides; sweep a new baseline at 194, then your change with --pair-with latest --replicates 194
   next: poisson-prove sweep --dry-run --replicates 194
@@ -225,13 +240,13 @@ A sweep stopped short keeps what it ran, exits 3 and says how to go on:
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --yes --max-rollouts 100 --name stopped-early  # exits 3
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
 stopped  100 of 1,746 rollouts kept in run "stopped-early" (partial) in … s
 …
   next: poisson-prove sweep --resume
 $ poisson-prove sweep --resume --yes
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
   Resuming "stopped-early": 100 stored, 1,646 to run
 …
@@ -250,7 +265,7 @@ ok  wrote the demo agent, a support bot that needs no key (5 files)
 …
 $ cd support-bot
 $ poisson-prove sweep --yes
-plan  1,164 rollouts of support-bot: 6 cells x 194 replicates on local, $0 (local)
+plan  1,164 rollouts of support-bot: 6 cells x 194 replicates on local, $0
 …
 done  1,164 rollouts in run "support-bot 2026-11-18 a" (complete) in … s
 …
@@ -286,7 +301,7 @@ ran, for how long, when it stopped and what the ledger was charged:
 <!-- docs-check: skip: needs your own AWS account -->
 ```console
 $ poisson-prove sweep --yes
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00 · your agent's own calls: $0 (prove.toml declares that a rollout costs nothing)
 …
 starting  4 × m7i.2xlarge in us-east-2  0 of 4 ready · 35 s
 ready  4 nodes · 32 vCPU · 1 min 12 s
@@ -312,13 +327,126 @@ $ poisson-prove sweep --dry-run --json
 {
   "schema": "poisson-prove.sweep/1",
   "verdict": "plan",
-  "sentence": "1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)",
+  "sentence": "1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0",
   "plan": {"rollouts": 1746, "cells": 9, "replicates": 194, "backend": "local"},
+  "cost": {"compute_usd": 0.0, "agent_usd_per_rollout": 0.0, "agent_usd": 0.0, "agent_basis": null, "total_usd": 0.0, "cap_usd": null},
   "design_mde": {"mde": 0.1991, "base_rate": 0.4, "direction": "rise", "test": "fisher"},
   "design_paired": {"mde": 0.1998, "base_rate": 0.4, "direction": "rise", "test": "mcnemar"}
   …
 }
 ```
+
+The `cost` object says what the plan priced, in dollars: `compute_usd`, the backend's estimate
+(0 on this machine, null on Modal when there is no estimate); `agent_usd_per_rollout`, `agent_usd`
+and `agent_basis`, the figure `[cost]` declares, that figure times the rollouts this command will
+run, and the declaration's `basis` (each null when nothing is declared); `total_usd`, the two
+parts together, a number only when both are; and `cap_usd`, the cap that holds them, or null.
+`plan.cost` stays the cost line's own words, as text.
+
+## What the plan prices
+
+Prove prices two things, and says which it did.
+
+**The compute a backend bills.** This machine adds nothing. Modal's and a cloud account's
+estimates are in [Backends](../backends.md).
+
+**Your agent's own calls**, at its own providers: the model calls and anything else a rollout
+pays for. Prove cannot see these and holds no price of any model, so it prices them only by a
+figure you declare. With nothing declared the plan says so, and on this machine it gives no
+dollar figure at all:
+
+<!-- docs-check: file unpriced.toml -->
+```toml
+target = "poisson_prove.examples.mock_agent:rollout"
+target_id = "airline-triage-agent"
+t_unit = "tool_calls"
+replicates = 194
+
+[axes.task_id]
+type = "categorical"
+values = ["search", "checkout", "refund"]
+
+[declare]
+failures = ["timeout", "violated"]
+```
+
+<!-- docs-check: run -->
+```console
+$ poisson-prove sweep unpriced.toml --dry-run
+plan  582 rollouts of airline-triage-agent: 3 cells x 194 replicates on local, your agent's own calls not priced
+…
+  Cost: your agent's own calls are not priced (unpriced.toml declares no [cost]); this machine adds nothing
+…
+```
+
+The line is the same for every agent whose spec has no `[cost]`, one that calls no model among
+them: Prove does not guess which kind of agent it has. To have the plan price your agent's calls,
+declare what one rollout costs, as you measured or reckon it, in a `[cost]` table
+([The sweep spec](../sweep-spec.md#cost)):
+
+<!-- docs-check: file priced.toml -->
+```toml
+target = "poisson_prove.examples.mock_agent:rollout"
+target_id = "airline-triage-agent"
+t_unit = "tool_calls"
+replicates = 194
+
+[axes.task_id]
+type = "categorical"
+values = ["search", "checkout", "refund"]
+
+[declare]
+failures = ["timeout", "violated"]
+
+[cost]
+usd_per_rollout = 0.0016
+basis = "costliest conversation measured on Haiku 5.5, 2026-11-21"
+```
+
+The plan multiplies the figure by the rollouts this command will run (those left, on `--resume`;
+`--replicates` and `--max-rollouts` as typed), and says whose figure it is, the rate as the spec
+writes it:
+
+<!-- docs-check: run -->
+```console
+$ poisson-prove sweep priced.toml --dry-run
+plan  582 rollouts of airline-triage-agent: 3 cells x 194 replicates on local, ~$0.93 of your agent's own calls
+…
+  Cost: ~$0.93 of your agent's own calls (582 rollouts at $0.0016 each, declared in priced.toml: costliest conversation measured on Haiku 5.5, 2026-11-21); this machine adds nothing
+…
+```
+
+`usd_per_rollout = 0` declares that a rollout costs nothing, and the plan then reads `$0` and
+says it is declared. The spec `init --example` writes and the demo's declare it. A paired sweep
+is priced as the first one is.
+
+**`--max-cost` holds everything the plan priced**, on every backend. On this machine, with
+`[cost]` declared, an estimate above the cap is refused before anything runs. The first `next:`
+is the same sweep with the smallest cap that admits the estimate; the other way down is fewer
+conditions, since the replicates are what the design needs:
+
+<!-- docs-check: run -->
+```console
+$ poisson-prove sweep priced.toml --dry-run --max-cost 0.50  # exits 1
+plan  582 rollouts of airline-triage-agent: 3 cells x 194 replicates on local, ~$0.93 of your agent's own calls
+…
+error: this sweep's estimate, ~$0.93 of your agent's own calls (582 rollouts at $0.0016 each, declared in priced.toml), is over --max-cost $0.50
+  next: poisson-prove sweep priced.toml --dry-run --max-cost 0.94
+  next: sweep fewer conditions: each one is 194 rollouts, ~$0.31 at the declared rate
+```
+
+An estimate at or under the cap passes, and the cost line then ends `· cap $0.94`. The other
+cases:
+
+| where | `[cost]` | what `--max-cost` holds |
+|---|---|---|
+| this machine | declared | your agent's declared calls |
+| this machine | not declared | nothing, so the cap is refused: `--max-cost has nothing to hold on this machine` |
+| Modal, a cloud account | declared | the compute estimate plus your agent's declared calls (on a cloud account, plus the ledger so far); the refusal names each part |
+| Modal, a cloud account | not declared | the compute estimate alone, as before, and the cost line says `compute only` beside the cap |
+
+A cloud account's `stop_cost` and its ledger stay compute only: Prove cannot see your agent's
+spend as it happens.
 
 ## The trial call, `--try`
 
@@ -330,7 +458,9 @@ it; one real call finds that before a sweep runs a thousand of them.
    lines and exit codes, a design too small among them. Nothing is called when the check refuses.
 2. It says what the call is, on a `try` line (the target, the spec's first condition, the first
    value of every axis as the spec writes them, the seed, and "on this machine") and a `cost`
-   line. The seed comes from a fresh salt each time, unless `--salt` gives one.
+   line, which follows what the spec declares under `[cost]`: with nothing declared, that the
+   call spends your agent's own calls for one case; with a figure, that figure for the one
+   rollout; with `usd_per_rollout = 0`, that it costs nothing. The seed comes from a fresh salt each time, unless `--salt` gives one.
 3. On a terminal it asks `Call it? [y/N]` on stderr, and only `y` or `yes` makes the call; a no
    calls nothing, writes nothing and exits 0. Piped or in CI it needs `--yes`, and without it the
    command line is wrong: exit 2, with `--yes` on the `error:` line.
@@ -348,20 +478,43 @@ agent's keys must be set on this machine for the trial.
 ```console
 $ poisson-prove sweep --try --yes
 try  one call of poisson_prove.examples.mock_agent:rollout on task_id search · tool_fail_rate 0, seed 3783313349, on this machine
-  cost  your agent's own calls for one case; Prove stores nothing
+  cost  nothing: prove.toml declares that a rollout costs nothing; Prove stores nothing
 ok  the rollout ran once and returned "completed" in 0.0 s
   condition  task_id search · tool_fail_rate 0
   seed  3783313349
   outcome  completed (declared neither a failure nor a success)
   t  8 of 20 tool_calls
+  model calls  none in the trace this call returned
   next: poisson-prove sweep
 ```
 
 The result's lines are the condition and the seed the call ran on, the outcome with the kind the
 spec declares for it (a failure, a success or neither), `t` beside the horizon in the spec's
-unit, `case_id` when the Episode carries one in `meta`, and `printed` when the rollout
-wrote to its stdout. Its `next:` is the sweep itself, on the spec, the target and the store you
+unit, what the call shows of its model calls, `case_id` when the Episode carries one in `meta`,
+and `printed` when the rollout wrote to its stdout. Its `next:` is the sweep itself, on the spec, the target and the store you
 typed.
+
+**The model calls of the one call** are counted from the trace the rollout returned in
+`meta["trace"]`, when it returned one ([Traces](../concepts/traces.md)). The mock agent's trace
+holds tool steps and no model call, so its line says none. A rollout whose trace has `llm` spans
+gets up to three lines after `t`:
+
+<!-- docs-check: skip: the lines of a rollout that returns a trace with model calls, which the example's does not -->
+```text
+  model calls  7 in this call (the llm spans of the trace it returned)
+  tokens  4,812 in, 391 out (recorded on 7 of 7 model calls)
+  at a sweep's size  3,568 rollouts like this one would make about 24,976 model calls; other conditions can differ
+```
+
+`model calls` is the number of `llm` spans. `tokens` sums the tokens those spans carry, and says
+on how many of them tokens were recorded; it is left out when none carries any. `at a sweep's
+size` is the same count times the rollouts the sweep would run. When the call returned no trace
+the one line is `model calls  not counted: this call returned no trace`, and when the trace is
+one Prove cannot read it is `not counted` too; the call is still a good one. No line gives
+dollars from tokens: Prove holds no price of a model, so the only dollar figure for your agent's
+calls is the one `[cost]` declares. The trial does not apply a `[capture]` table, so an agent
+whose calls are recorded only by capture is `not counted` here, and a sweep's stored traces hold
+its calls. Nothing is stored to remember the count.
 
 **What the rollout prints goes to stderr, never to stdout**, with `--json` or without, however it
 is written: a `print` in the rollout or when the target is imported, a write to
@@ -389,11 +542,11 @@ def rollout(cfg, seed):
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --dry-run --target broken_rollout:rollout
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
 $ poisson-prove sweep --try --yes --target broken_rollout:rollout  # exits 1
 try  one call of broken_rollout:rollout on task_id search · tool_fail_rate 0, seed 3849055552, on this machine
-  cost  your agent's own calls for one case; Prove stores nothing
+  cost  nothing: prove.toml declares that a rollout costs nothing; Prove stores nothing
 error: the rollout raised KeyError: "task"
   raised in  broken_rollout.py:5
   traceback  ~/.cache/poisson-prove/errors.log
@@ -413,7 +566,10 @@ The endings that exit 1, each with its `error:` line:
 
 With `--json`, a good call prints one `poisson-prove.sweep/1` document, verdict `ok`, with a `try`
 object: `condition`, `seed`, `outcome`, `t`, `horizon`, `meta` (all of it: the packaged example's
-also holds the steps it recorded, left out below), `seconds` and `printed` (the count of lines).
+also holds the steps it recorded, left out below), `seconds`, `printed` (the count of lines),
+`model_calls` (the count of `llm` spans, or null when the call returned no trace Prove can read)
+and `tokens` (`input`, `output` and `calls_with_tokens`, or null when no `llm` span carries
+tokens).
 A failed call leaves stdout empty, with the same exit code and the same lines on
 stderr, as every refusal does.
 
@@ -432,7 +588,9 @@ $ poisson-prove sweep --try --yes --json
     "horizon": 20.0,
     "meta": {"task_id": "search"},
     "seconds": 0.0004,
-    "printed": 0
+    "printed": 0,
+    "model_calls": 0,
+    "tokens": null
   },
   "next": ["poisson-prove sweep"]
 }
@@ -443,7 +601,8 @@ $ poisson-prove sweep --try --yes --json
 `--pair-with` it is a wrong command line (exit 2): the first contradicts it, and the other two
 name a stored run for a call that stores nothing. The options that shape a stored run or a remote
 sweep (`--name`, `--note`, `--max-rollouts`, `--batch-size` and the remote backends' own) are
-read as a sweep reads them and change nothing about the one call. It calls the rollout as it is,
+read as a sweep reads them and change nothing about the one call. `--max-cost` holds a sweep's
+estimate, so the one call is made whatever the cap is, and a `note:` line says so. It calls the rollout as it is,
 with no `[capture]` recording and no `[chaos]` fault.
 
 ## What the target prints, with `--json`
@@ -494,8 +653,9 @@ do. A local sweep is not stopped this way.
   With `--try`, the one call returned an Episode the sweep could store, or the answer at the
   question was no and nothing was called.
 - `1`: refused before anything ran, and nothing was written: the spec or the rollout is wrong, the
-  design is underpowered, the backend's extra is missing, the estimate is above `--max-cost`, or
-  the question cannot be asked (piped, without `--yes`). Declining the question also writes
+  design is underpowered, the backend's extra is missing, the estimate is above `--max-cost`
+  (or, on this machine, `--max-cost` was given and the spec declares no `[cost]`), or the
+  question cannot be asked (piped, without `--yes`). Declining the question also writes
   nothing. With `--try`, also a call that was made and did not end in an Episode the sweep could
   store: it raised, ran past its limit, returned something else or an outcome `[declare]` does
   not list, or ended its own process.

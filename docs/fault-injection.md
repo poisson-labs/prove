@@ -165,10 +165,10 @@ successes = ["acted"]
 <!-- docs-check: run -->
 ~~~console
 $ poisson-prove sweep clean.toml --yes
-plan  400 rollouts of tool-agent: 2 cells x 200 replicates on local, $0 (local)
+plan  400 rollouts of tool-agent: 2 cells x 200 replicates on local, your agent's own calls not priced
 …
 $ poisson-prove sweep faulted.toml --yes --pair-with latest
-plan  400 rollouts of tool-agent: 2 cells x 200 replicates on local, $0 (local)
+plan  400 rollouts of tool-agent: 2 cells x 200 replicates on local, your agent's own calls not priced
 …
 $ poisson-prove diff
 worse  no_tool_call: … safer, … worse (paired test on shared seeds)

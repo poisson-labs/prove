@@ -249,6 +249,13 @@ def reprint(text: str) -> str:
     text = re.sub(r"\S*/\S*", keep, text)
     # A value given back to the user ("got 1.23456") is given back as typed.
     text = re.sub(r"\bgot \S+", keep, text)
+    # So is the rate a sweep spec declares under [cost] ("800 rollouts at $0.0274 each"): it is
+    # the person's figure, and the count times the rate as written gives the product beside it.
+    text = re.sub(
+        r"(?<=\brollouts at )\$\d[\d,]*(?:\.\d+)?|(?<=\brollout at )\$\d[\d,]*(?:\.\d+)?",
+        keep,
+        text,
+    )
     for pattern in (_RUN_ID, _DATE, _VERSION):
         text = pattern.sub(keep, text)
     text = re.sub(r"(?<![\w.])" + _HEX.pattern + r"(?![\w.])", keep, text)

@@ -24,7 +24,7 @@ test at the end (reading L3).
 - L1 PF6.0's "equal, byte for byte, the base with the three changes applied": the base is committed
   as ``tests/fixtures/cli-look/bfe802d.md`` with each change's old and new text in ``changes.json``
   (each old text occurs exactly once), and the file's first 120 lines are the result;
-  ``docs/cli-look.md`` itself is held to its sha256 (``c6765e0e…9338``).
+  ``docs/cli-look.md`` itself is held to its sha256 (``2fdf38df…0d4c`` since First run M6's dated note; ``c6765e0e…9338`` before it).
 - L2 "Piped, the pretty build's output equals the plain build's": the same code on streams that are
   not terminals gives the same bytes with and without ``--plain`` and with Rich unimportable, each
   variant running the whole corpus through the command's own entry point in a process of its own; a
@@ -86,7 +86,9 @@ from pf6_support import (
     run_pty, sha256_of, shared_world, split_first_line, squash, strip_escapes, styled, styled_lines,
 )
 
-LOOK_SHA256 = "c6765e0efe58ad202204774185587b24192ce6d981eb1cf06f6f6edbe6909338"
+#: First run M6 (M6A-3, ruled 2026-11-23): the file gained a dated note after the exit-code table,
+#: that a declared rate is printed as written; its first 120 lines are as they were.
+LOOK_SHA256 = "2fdf38dffdeeadf0aae09a74c60340870ec4b993c67bd6a6250943592e770d4c"
 BASE_SHA256 = "af0bb656e8a955befbdcdc031cce7c78d62248cd3b90adebf1e63d837298ce79"
 PREFIX_SHA256 = "fca2017b1923ed0725d54fd8829e288f677b75a78b93eff12bd862ad07312697"
 #: The look file's two added sections, the terminal app and the static UI, each from its heading to the next one (or the end).
@@ -155,14 +157,25 @@ def test_pf6_0_the_exit_code_table_has_the_six_codes_and_their_meanings() -> Non
         assert rows[code].startswith(meaning), (code, rows[code])
 
 
-def test_pf6_0_the_new_sections_follow_the_files_old_end_and_no_dated_note_is_added() -> None:
-    """After the exit-code table's closing paragraph come exactly the terminal app's and the static
-    UI's sections, in that order, as filed; the file carries no dated note: no date anywhere
-    and nothing between the title and the first paragraph but a blank line."""
+def test_pf6_0_the_new_sections_follow_the_files_old_end_and_the_one_dated_note_holds_the_only_date() -> None:
+    """After the exit-code table's closing paragraph come the dated notes, then exactly the
+    terminal app's and the static UI's sections, in that order, as filed; the file carries no
+    date outside its one "Dated notes" section, and nothing between the title and the first
+    paragraph but a blank line.
+
+    First run M6 (M6A-3, ruled 2026-11-23): until then the file carried no dated note at all, and
+    the terminal app's section followed the table directly. The one note says a declared rate is
+    printed as written, an exception to rule 10's dollars."""
     look = _look()
     rest = look[len(_amended_base()):]
-    assert rest.startswith("\n## The terminal app\n"), rest[:60]
-    assert re.findall(r"^## .+$", rest, re.MULTILINE) == ["## The terminal app", "## The banner", "## The static UI"]
+    assert rest.startswith("\n## Dated notes\n"), rest[:60]
+    assert re.findall(r"^## .+$", rest, re.MULTILINE) == ["## Dated notes", "## The terminal app", "## The banner", "## The static UI"]
+    notes, rest = rest.split("## The terminal app\n", 1)
+    rest = "\n## The terminal app\n" + rest
+    items = [line for line in notes.splitlines() if line.startswith("- ")]
+    assert len(items) == 1 and re.match(r"- \d{4}-\d\d-\d\d, rule 10\b", items[0]), items
+    assert "as they wrote it" in " ".join(notes.split()), notes
+    look = look.replace(notes, "\n", 1)
     app = rest[1:].split("## The banner", 1)[0]
     ui = "## The static UI" + rest.split("## The static UI", 1)[1]
     import hashlib

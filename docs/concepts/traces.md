@@ -93,6 +93,14 @@ Nothing is sent anywhere: the spans go to the local store and nowhere else.
 
 ## Where traces show
 
+`poisson-prove sweep --try` reads the trace the one call returned in `meta["trace"]` and counts
+its `llm` spans: the result's `model calls` line gives the count, its `tokens` line sums the
+tokens those spans carry and says on how many of them tokens were recorded, and one more line
+gives the same count at the sweep's size. A call that returned no trace is `not counted`. The
+trial does not apply a `[capture]` table, so what it counts is what your rollout itself returns;
+a sweep's stored traces hold what capture recorded
+([the trial call](../commands/sweep.md#the-trial-call---try)).
+
 `inspect` prints an episode's spans under its condition and seed, one line each, with errors
 marked. A run with a `[declare]` table of `steps` and `gates` is checked against its stored spans:
 `report`, the receipt, `serve` and `inspect` list the declared steps no span carried
