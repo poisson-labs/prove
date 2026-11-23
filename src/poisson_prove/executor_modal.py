@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from poisson_prove import _cost, _look
 from poisson_prove._resolve import resolve, split_import_path
 from poisson_prove.capture import CaptureSpec, CaptureStatus, install
 from poisson_prove.chaos import ChaosSpec, ChaosStatus, _installed_hooks
@@ -735,6 +736,16 @@ def _check_cost(p: Plan, options: ModalOptions, image: ImageSpec) -> None:
             "max_cost is set but no estimate is possible: pass est_seconds_per_episode "
             "(and a gpu with a known price) or drop max_cost"
         )
+    agent = _cost.agent_of(p.spec, len(p.pairs), options.max_rollouts)
+    if agent.declared and not agent.free:
+        # The cap holds everything the plan priced: compute and the agent's declared calls.
+        if _cost.over(agent, options.max_cost, compute_usd=estimate):
+            raise CostGuard(
+                f"estimated cost ~{_look.fmt_dollars(estimate)} of compute (best-effort, "
+                f"{_PRICES_ASOF} prices) plus {agent.phrase(basis=False)} exceeds max_cost "
+                f"{_look.fmt_dollars(options.max_cost)}"
+            )
+        return
     if estimate > options.max_cost:
         raise CostGuard(
             f"estimated cost ~${estimate:.2f} exceeds max_cost ${options.max_cost:.2f} "
@@ -960,6 +971,13 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
         cost = f"Cost: unknown (no estimate; {covers})"
     else:
         cost = f"Cost: unknown (no price for gpu {gpu} in the table; {covers})"
+    # The agent's own calls follow the compute part, which is worded as it always was.
+    cost += _cost.remote_tail(
+        _cost.agent_of(spec, len(p.pairs), options.max_rollouts),
+        compute_usd=estimate,
+        cap=options.max_cost,
+        cap_shown=False,
+    )
     lines = [
         f"Sweep: {len(spec.axis_types)} axes · {len(spec.configs)} cells · "
         f"N={spec.replicates} → {total} rollouts",

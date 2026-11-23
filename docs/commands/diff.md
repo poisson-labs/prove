@@ -87,7 +87,12 @@ examples:
   `previous` or `#1`, as `runs` numbers them. With none, `previous` and `latest`.
 - `--event NAME` is an outcome that counts as the event; give it once per event. Without it the
   events are the failures and successes the runs' `[declare]` tables name; for runs that declare
-  none, every outcome but the most frequent, which is named as the non-event. Whether a rise of an
+  none, every outcome but the most frequent, which is named as the non-event. When the events
+  come from the declarations, an outcome the runs declare or hold that is neither a failure nor a
+  success is left out, and the `inferred:` line names every outcome left out, in sorted order:
+  `…; left out: completed, guardrail_blocked, declared neither (compare one with --event NAME)`.
+  `diff --event NAME` compares one of them, in the kindless words. With `--event` given there is
+  no `inferred:` line, and when nothing is left out the line is as it always was. Whether a rise of an
   event is worse or safer comes from those tables; for runs that declare nothing, the name can
   carry it, `--event timeout:failure`, and otherwise the verdict uses the kindless words `higher`,
   `lower` and `mixed`.
@@ -106,7 +111,8 @@ examples:
   bound. An option that shapes one of those sections (`--by`, `--depth`, `--permutations`,
   `--seed`, `--max-group-mde`) prints them too.
 - `--json` prints the comparison as one JSON document, `poisson-prove.diff/1`. A tool that reads
-  `diff` reads this, not the text.
+  `diff` reads this, not the text. Its optional `left_out` list holds the names of the outcomes
+  left out, and is present only when there are any; a comparison saved before 0.5.0 has none.
 - `--save` saves the comparison into the store, under `.poisson/artifacts/`, where the
   [dashboard](../dashboard.md) and the [terminal app](../terminal-app.md) find it.
 - `--permutations N` and `--seed N` set the within-condition permutations behind the omnibus test
@@ -217,7 +223,8 @@ $ poisson-prove diff --json
   "verdict": "trade",
   "sentence": "timeout: … safer, … worse · violated: … safer, … worse (paired test on shared seeds); …",
   "method": "mcnemar_bh",
-  "method_chosen": "default"
+  "method_chosen": "default",
+  "left_out": ["completed"]
   …
 }
 ```

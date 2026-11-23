@@ -17,10 +17,10 @@ $ poisson-prove init --example
 ok  wrote prove.toml: a sweep of the keyless mock agent, 9 conditions x 194 replicates
   next: poisson-prove sweep
 $ poisson-prove sweep --yes --name before
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
 $ poisson-prove sweep --yes --replicates 20 --max-mde 0.7 --pair-with before --name quick-check
-plan  180 rollouts of mock-agent: 9 cells x 20 replicates on local, $0 (local)
+plan  180 rollouts of mock-agent: 9 cells x 20 replicates on local, $0
 …
   smallest rise one condition alone would be flagged for  0.660 at its worst base rate, 0.150 (the paired test, q 0.05 over 18 tests, 4 times in 5; you accept up to 0.700)
 done  180 rollouts in run "quick-check" (complete) in … s, paired with "before"
@@ -55,13 +55,13 @@ refusal names the replicates that reach the change you accept:
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --replicates 20 --pair-with before --dry-run  # exits 1
-plan  180 rollouts of mock-agent: 9 cells x 20 replicates on local, $0 (local)
+plan  180 rollouts of mock-agent: 9 cells x 20 replicates on local, $0
 …
 error: underpowered design: one condition alone would be flagged for a change of 0.568 at its worst base rate, 0.000, and you accept 0.200
   next: poisson-prove sweep --replicates 194 --pair-with before --dry-run
   next: poisson-prove sweep --replicates 20 --pair-with before --dry-run --max-mde 0.662
 $ poisson-prove sweep --replicates 194 --pair-with before --dry-run
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
   smallest rise one condition alone would be flagged for  0.200 at its worst base rate, 0.400 (the paired test, q 0.05 over 18 tests, 4 times in 5; you accept up to 0.200)
 ```

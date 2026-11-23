@@ -102,7 +102,8 @@ examples:
   only.
 - `--with-setup`, with `--demo`, also writes the two files a coding agent would write for the demo:
   `prove_rollout.py` and `prove.toml`, three tickets at two temperatures, 194 replicates each. The
-  demo then sweeps as it is, for someone with no coding agent.
+  demo then sweeps as it is, for someone with no coding agent. Its spec declares that a rollout
+  costs nothing (`usd_per_rollout = 0` under `[cost]`), so its plan reads `$0`.
 - `--json` prints what was written as one JSON document.
 - `--store PATH`, `--plain` and `--debug` are the options every verb takes: the store folder
   (`init` reads none), plain text on a terminal too, and the traceback of an unexpected failure.
@@ -120,6 +121,12 @@ $ poisson-prove init --target my_rollout:rollout --out mine.toml
 ok  wrote mine.toml: a template; set its axes to what you vary
   next: poisson-prove sweep mine.toml
 ```
+
+The example's spec ends with a `[cost]` table, `usd_per_rollout = 0`: the mock agent calls no
+model, so the spec declares that a rollout costs nothing and its plan reads `$0`. A template
+declares no `[cost]`, and its plan says your agent's own calls are not priced until you declare
+what a rollout costs ([The sweep spec](../sweep-spec.md#cost)). Prove 0.4.0 and earlier refuse a
+spec that has a `[cost]` table.
 
 A file that exists is refused, and the refusal says how to replace it:
 
@@ -195,7 +202,9 @@ With `--json` and `--runs-on`, the one document also says where the spec runs (`
 whether that is ready on this machine (`ready`), and its `next` is the command that follows from
 that. With `--json` alone the document is the one below, as it always was.
 
-The setup for your coding agent, and the same as JSON for a script:
+The setup for your coding agent, and the same as JSON for a script. The `more` line says where to
+ask for more than your cases: the skill writes your cases as the one axis, so to compare anything
+else, add it to the prompt in your own words ("Also compare temperature 0 and 0.7."):
 
 <!-- docs-check: run -->
 ```console
@@ -206,6 +215,7 @@ ok  wrote the setup for your coding agent (4 files)
   wrote  .claude/skills/poisson-prove-setup/SKILL.md
   wrote  .claude/skills/poisson-prove-setup/prompt.txt
   prompt  Use the poisson-prove-setup skill in this repository: set Poisson Prove up for me to review, then stop.
+  more  to compare more than your cases, add it to the prompt in your own words
   next: give your coding agent the prompt above, then review what it wrote
 $ poisson-prove init --example --out other.toml --json
 {
@@ -232,6 +242,7 @@ ok  wrote the setup for your coding agent (4 files)
   wrote  my-agent/.claude/skills/poisson-prove-setup/prompt.txt
   open  your coding agent in my-agent
   prompt  Use the poisson-prove-setup skill in this repository: set Poisson Prove up for me to review, then stop.
+  more  to compare more than your cases, add it to the prompt in your own words
   next: give your coding agent the prompt above, then review what it wrote
 ```
 

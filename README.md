@@ -66,11 +66,12 @@ $ poisson-prove init --agent
 ok  wrote the setup for your coding agent (4 files)
 …
   prompt  Use the poisson-prove-setup skill in this repository: set Poisson Prove up for me to review, then stop.
+  more  to compare more than your cases, add it to the prompt in your own words
   next: give your coding agent the prompt above, then review what it wrote
 ```
 
 This writes a skill your coding agent (Claude Code, Codex, Cursor) follows. Give it the prompt: it
-reads your code, writes `prove_rollout.py` and `prove.toml`, checks them with
+reads your code, writes `prove_rollout.py` and `prove.toml` (your cases, and only the other conditions you ask it to compare), checks them with
 `poisson-prove sweep --dry-run`, asks you before one real call of your agent (`sweep --try`), and
 hands over as ready or not ready. Prove makes no model call and reads no key. The loop is yours:
 `poisson-prove sweep`, your change, `sweep --pair-with latest`, then `poisson-prove diff`. See
@@ -213,7 +214,7 @@ calls neither; Trace reads Prove's store. See
 
 A sweep runs on this machine unless its spec says otherwise: `poisson-prove where` says where a spec's sweeps run and changes it. `--backend modal` runs them in parallel containers on your own Modal account (`pip install "poisson-prove[modal]"`).
 `--backend cloud` runs them on a cluster in your own cloud account, AWS in this release (`pip install "poisson-prove[cloud]"`, then `aws login`): Poisson Prove starts the nodes and stops them when the sweep ends, however it ends.
-The plan gives the cost before anything starts, and the rows come back to the same local store. See [Backends](https://github.com/poisson-labs/prove/blob/main/docs/backends.md), and
+The plan gives the compute cost before anything starts, and your agent's own calls when the spec declares them under `[cost]`; the rows come back to the same local store. See [Backends](https://github.com/poisson-labs/prove/blob/main/docs/backends.md), and
 [What leaves this machine](https://github.com/poisson-labs/prove/blob/main/docs/backends.md#what-leaves-this-machine) for who carries your code on a cloud sweep.
 
 Prove never phones home. No telemetry, no analytics, no update checks. `poisson-prove serve` binds a

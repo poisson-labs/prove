@@ -171,7 +171,15 @@ One line per label per arm. The dead arm was 100% one label; a glance would have
 caught it. `poisson-prove inspect` on each label, or three lines of pandas over
 the store, does it — do it before you look at the comparison.
 
-**7. Decide what you will do if it happens anyway.**
+**7. Know which labels a comparison reads.**
+With no `--event` named, `diff` and `report` compare the outcomes your `[declare]` table names a
+failure or a success. An outcome declared neither, such as a guardrail that blocked a request, is
+left out of the comparison, and so is one the runs hold that the table does not list. `diff` says
+so where you read it, on its `inferred:` line: `left out: guardrail_blocked, declared neither
+(compare one with --event NAME)`. If a label you care about is on that list, declare its kind, or
+compare it by name with `poisson-prove diff --event guardrail_blocked`.
+
+**8. Decide what you will do if it happens anyway.**
 There is exactly one honest window to change the analysis after seeing the data:
 before any comparison is run, when the change is stated and recorded. The pilot
 amended its written plan to exclude API-error crashes by their `crash_reason`

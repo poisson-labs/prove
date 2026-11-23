@@ -121,18 +121,23 @@ the plan with the smallest change the design could detect:
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep support.toml --dry-run
-plan  1,200 rollouts of support-bot: 6 cells x 200 replicates on local, $0 (local)
+plan  1,200 rollouts of support-bot: 6 cells x 200 replicates on local, your agent's own calls not priced
   target  my_rollout:rollout (imports, takes cfg and seed)
   outcomes  failures: timeout, unresolved; successes: resolved
 …
 ```
+
+The plan's first line says `your agent's own calls not priced`: this spec declares no `[cost]`,
+and Prove does not guess what an agent spends. Declare what one rollout costs, or
+`usd_per_rollout = 0` for an agent like this stand-in that calls no model, and the plan prices the
+sweep ([The sweep spec](sweep-spec.md#cost)).
 
 Run it, change the agent (here, its prompt), and run it again on the same seeds:
 
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep support.toml --yes
-plan  1,200 rollouts of support-bot: 6 cells x 200 replicates on local, $0 (local)
+plan  1,200 rollouts of support-bot: 6 cells x 200 replicates on local, your agent's own calls not priced
 …
 done  1,200 rollouts in run "support-bot 2026-10-26 a" (complete) in … s
 ```
@@ -145,7 +150,7 @@ SYSTEM = "Answer the customer's ticket step by step. Ask before refunding."
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep support.toml --yes --pair-with latest
-plan  1,200 rollouts of support-bot: 6 cells x 200 replicates on local, $0 (local)
+plan  1,200 rollouts of support-bot: 6 cells x 200 replicates on local, your agent's own calls not priced
 …
 done  1,200 rollouts in run "support-bot 2026-10-26 b" (complete) in … s, paired with "support-bot 2026-10-26 a"
 …
@@ -205,10 +210,10 @@ successes = ["resolved"]
 <!-- docs-check: run -->
 ```console
 $ poisson-prove --store mixed-runs sweep mixed.toml --yes
-plan  400 rollouts of support-bot: 2 cells x 200 replicates on local, $0 (local)
+plan  400 rollouts of support-bot: 2 cells x 200 replicates on local, your agent's own calls not priced
 …
 $ poisson-prove --store mixed-runs sweep mixed.toml --yes --pair-with latest
-plan  400 rollouts of support-bot: 2 cells x 200 replicates on local, $0 (local)
+plan  400 rollouts of support-bot: 2 cells x 200 replicates on local, your agent's own calls not priced
 …
 $ poisson-prove --store mixed-runs diff  # exits 1
 error: condition temperature 0.0 ran 3 cases (password, refund, shipping); each case must be its own sweep axis

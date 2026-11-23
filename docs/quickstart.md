@@ -35,7 +35,7 @@ terminal it asks `[y/N]`; piped or in CI it needs `--yes`):
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --yes
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
   target  poisson_prove.examples.mock_agent:rollout (imports, takes cfg and seed)
   outcomes  failures: timeout, violated
 …
@@ -46,7 +46,10 @@ done  1,746 rollouts in run "mock-agent 2026-10-26 a" (complete) in … s
   next: poisson-prove sweep --target poisson_prove.examples.mock_agent:rollout_patched --pair-with latest
 ```
 
-The plan says what will run and what it costs (nothing, here), and the smallest change in one
+The plan says what will run and what it costs: `$0` here, because the example's spec declares
+that a rollout costs nothing (`usd_per_rollout = 0` under `[cost]`; the mock agent calls no
+model). A spec with no `[cost]` gets no `$0`: its plan says your agent's own calls are not priced.
+The plan also gives the smallest change in one
 condition's failure rate this design would catch 4 times in 5: once for this sweep as it stands,
 and once for the sweep you will pair with it on the same seeds. Had either been above the 0.20
 you accept by default, the sweep would have refused before running anything and said how many
@@ -59,7 +62,7 @@ seeds as the last one:
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --yes --target poisson_prove.examples.mock_agent:rollout_patched --pair-with latest
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
 done  1,746 rollouts in run "mock-agent 2026-10-26 b" (complete) in … s, paired with "mock-agent 2026-10-26 a"
 …
@@ -76,8 +79,14 @@ trade  timeout: … safer, … worse · violated: … safer, … worse (paired t
   before  mock-agent 2026-10-26 a
   after  mock-agent 2026-10-26 b
 …
+inferred: no event was given, so the event set is timeout, violated, the failures and successes the runs declared; left out: completed, declared neither (compare one with --event NAME)
+…
   next: poisson-prove report --x task_id --y tool_fail_rate
 ```
+
+The `inferred:` line says which outcomes were compared, the two failures the spec declares, and
+which were left out: `completed`, which the spec declares neither a failure nor a success.
+`poisson-prove diff --event completed` compares it.
 
 `trade`: the patch made the agent safer in some conditions and worse in at least one. The forbidden
 fallback (`violated`) fell and never rose; running out of tool calls (`timeout`) rose where tools

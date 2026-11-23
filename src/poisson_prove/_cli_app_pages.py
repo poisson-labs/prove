@@ -1869,6 +1869,10 @@ _PLAN_KNOWN = {
     "plan",
     "design_mde",
     "design_paired",
+    # The cost object's place is the plan's own Cost: line, which gives each of its facts in
+    # words: the compute part, the declared rate as the spec writes it, the product, the sum and
+    # the cap. Listed again as bare numbers, the rate would be cut to three decimals.
+    "cost",
     "next",
 }
 

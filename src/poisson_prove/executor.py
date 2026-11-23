@@ -30,7 +30,7 @@ from multiprocessing.connection import Connection
 from types import FrameType
 from typing import Any
 
-from poisson_prove import __version__, _look, stats
+from poisson_prove import __version__, _cost, _look, stats
 from poisson_prove import capture as capture_module
 from poisson_prove._limits import Design, design
 from poisson_prove.capture import CaptureSpec, CaptureStatus, Recorder, capture, install
@@ -632,15 +632,27 @@ def _capture_line(spec: CaptureSpec | None) -> str | None:
     )
 
 
-def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
-    """Text block describing the run. Non-interactive; the CLI prints it and asks."""
+def preflight(
+    p: Plan,
+    *,
+    cost_estimate: str | None = None,
+    max_rollouts: int | None = None,
+    max_cost: float | None = None,
+) -> str:
+    """Text block describing the run. Non-interactive; the CLI prints it and asks.
+
+    The ``Cost:`` line is the agent's own calls as the spec's ``[cost]`` table declares them,
+    times the rollouts left (at most ``max_rollouts``), or the words that they are not priced;
+    this machine adds nothing. ``max_cost`` is the cap the line names, when one was given."""
     spec = p.spec
     total = spec.total_rollouts()
+    if cost_estimate is None:
+        cost_estimate = _cost.local_line(_cost.agent_of(spec, len(p.pairs), max_rollouts), max_cost)
     lines = [
         f"Sweep: {len(spec.axis_types)} axes · {len(spec.configs)} cells · "
         f"N={spec.replicates} → {total} rollouts",
         f"Backend: {p.backend} · target: {spec.target_id} · t_unit: {spec.t_unit}",
-        f"Cost: {cost_estimate if cost_estimate is not None else '$0 (local)'}",
+        f"Cost: {cost_estimate}",
     ]
     capture_line = _capture_line(spec.capture)
     if capture_line is not None:

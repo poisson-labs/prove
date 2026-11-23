@@ -63,10 +63,10 @@ first run's seeds with `--pair-with latest`:
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep prompt.toml --yes
-plan  600 rollouts of support: 3 cells x 200 replicates on local, $0 (local)
+plan  600 rollouts of support: 3 cells x 200 replicates on local, your agent's own calls not priced
 …
 $ poisson-prove sweep prompt.toml --yes --target support:rollout_v2 --pair-with latest
-plan  600 rollouts of support: 3 cells x 200 replicates on local, $0 (local)
+plan  600 rollouts of support: 3 cells x 200 replicates on local, your agent's own calls not priced
 …
   next: poisson-prove diff
 $ poisson-prove diff

@@ -47,6 +47,20 @@ The report shows each model's share of unresolved tickets, per ticket type, with
 each. That is a description, not a test: `diff` compares the same condition across two runs, and
 `model=gpt-4.1` and `model=gpt-4.1-mini` are different conditions of one run.
 
+A model axis is one you ask for. It doubles the rollouts here, and one model's requests cost more
+than the other's, so the setup skill never adds one unasked. To have the plan price the sweep,
+declare what a rollout costs under `[cost]`. One figure prices every rollout, so declare the
+costlier model's, and the plan's dollars are an upper bound:
+
+<!-- docs-check: run -->
+```toml
+[cost]
+usd_per_rollout = 0.0274
+basis = "costliest conversation measured on gpt-4.1"
+```
+
+Without the table the plan says your agent's own calls are not priced; it never guesses.
+
 ## The test: one model per run, paired
 
 To test the switch, make the model the change between two runs, as you would a prompt: one rollout

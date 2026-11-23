@@ -21,3 +21,8 @@ values = [0.0, 0.3, 0.55]
 # The outcomes that count against the agent.
 [declare]
 failures = ["timeout", "violated"]
+
+# What one rollout costs at the agent's own providers, in dollars. The mock agent calls no model,
+# so a rollout costs nothing, and the plan reads $0 for that stated reason.
+[cost]
+usd_per_rollout = 0

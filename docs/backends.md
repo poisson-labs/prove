@@ -34,7 +34,11 @@ starts.
 
 `--backend local` runs every rollout in Prove's own process, one after another, on this machine.
 It is where a spec with neither table runs. It needs nothing beyond `pip install poisson-prove`,
-and costs nothing but your agent's own calls.
+and this machine adds nothing to what a sweep costs. What your agent itself spends, the plan
+prices only when the spec declares it: with no `[cost]` table the plan reads `your agent's own
+calls are not priced (prove.toml declares no [cost]); this machine adds nothing`, and with one it
+multiplies the declared figure by the rollouts ([The sweep spec](sweep-spec.md#cost)). The
+example's spec declares that a rollout costs nothing, so its plan, below, reads `$0`.
 
 `--episode-timeout S` limits one episode to `S` seconds: each episode then runs in a child process,
 and one past the limit is stopped and stored with no outcome, as an error of kind `episode_timeout`, with
@@ -44,7 +48,7 @@ raises is stored as an errored episode either way, and the sweep goes on.
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --dry-run --episode-timeout 30
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0
 …
 ```
 
@@ -97,16 +101,25 @@ error: this machine is not signed in to Modal
 The plan prints the cost estimate: Modal's compute for the containers, from Modal's prices of
 2026-09-03, which Prove carries and names on every plan. It covers compute only, not model tokens:
 what your agent spends at its model provider is on that provider's bill. Without
-`est_seconds_per_episode` there is no estimate and the plan says so. With `max_cost` (or
-`--max-cost`) a sweep whose estimate is above it is refused before anything starts, and so is one
-with a cap and no estimate to hold against it:
+`est_seconds_per_episode` there is no estimate and the plan says so. The agent's part follows the
+compute part on the same line. With no `[cost]` table it is `· your agent's own calls are not
+priced (prove.toml declares no [cost])`. With a figure declared it is `+ ~$2.79 of your agent's
+own calls (1,746 rollouts at $0.0016 each, declared in prove.toml)`, then `= ` and the sum when
+the compute part is a figure. The example's spec declares that a rollout costs nothing, which
+the line below says.
+
+With `max_cost` (or `--max-cost`) a sweep whose estimate is above it is refused before anything
+starts, and so is one with a cap and no estimate to hold against it. The cap holds everything the
+plan priced: the compute estimate, plus your agent's calls when `[cost]` declares them, and the
+refusal names each part. With no `[cost]` it holds compute alone, as it always did, and the cost
+line says so beside the cap: `cap $3.00 (compute only)`.
 
 <!-- docs-check: skip: needs a Modal sign-in on this machine -->
 ```console
 $ poisson-prove sweep --backend modal --dry-run
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on modal, unknown (no estimate; Modal's 2026-09-03 prices, which cover compute, not model tokens)
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on modal, unknown (no estimate; Modal's 2026-09-03 prices, which cover compute, not model tokens) · your agent's own calls: $0 (prove.toml declares that a rollout costs nothing)
 …
-  Cost: unknown (no estimate; Modal's 2026-09-03 prices, which cover compute, not model tokens)
+  Cost: unknown (no estimate; Modal's 2026-09-03 prices, which cover compute, not model tokens) · your agent's own calls: $0 (prove.toml declares that a rollout costs nothing)
 …
 ```
 
@@ -140,14 +153,14 @@ they cost, and who carries your code:
 <!-- docs-check: skip: needs your own AWS account -->
 ```console
 $ poisson-prove sweep --dry-run
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00 · your agent's own calls: $0 (prove.toml declares that a rollout costs nothing)
 …
   Backend: cloud · AWS · target: mock-agent · t_unit: tool_calls
   Account: AWS 6030…4933, signed in with the AWS CLI
   Cluster: Prove starts 4 × m7i.2xlarge in us-east-2 (8 vCPU each, 32 in all, ceiling 32) running python:3.11, and stops them when the sweep ends · 8 slots each · 32 at once · if this machine stops first, the nodes stop themselves within 5 min · this machine is kept from idle sleep while they run
 …
   Traffic: your code, its inputs and its results go between this machine and the nodes through Burla's relay (the cluster software Prove uses); the store stays on this machine
-  Cost: ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
+  Cost: ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00 · your agent's own calls: $0 (prove.toml declares that a rollout costs nothing)
 …
 ```
 
@@ -156,7 +169,11 @@ plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account
 These keys are required: `provider`, `region`, `machine_type`, `nodes`, `ledger` (a JSON-lines
 file of what has been spent, checked before anything starts and written as the job goes),
 `stop_cost` (the spend at which Prove stops the job itself), `max_cost` (the estimate above which
-the sweep is refused) and `est_seconds_per_episode`. The price comes from Prove's own AWS price
+the sweep is refused) and `est_seconds_per_episode`. `max_cost` holds the ledger so far and this
+run's compute estimate, plus your agent's calls when the spec declares them under `[cost]`; with
+no `[cost]` the cost line says `compute only` beside the cap and that your agent's own calls are
+not priced. `stop_cost` and the ledger are compute only either way: Prove cannot see your agent's
+spend as it happens. The price comes from Prove's own AWS price
 table unless `usd_per_node_hour` and `price_asof` are given together.
 [The sweep spec](sweep-spec.md#cloud) has the optional keys and the price table. This is the table
 `poisson-prove where cloud --yes` writes:

@@ -16,8 +16,36 @@ All notable changes to Poisson Prove are written here. The format follows
   stores nothing (#5). It checks the spec as `--dry-run` does, asks before the call (`--yes`
   answers it), and exits 1 with the file and line of a raise when the call does not end in an
   Episode a sweep could store. What the rollout prints goes to stderr.
+- `poisson-prove sweep --try` says how many model calls the one call made, and their tokens, when
+  your rollout returns a trace, and what that count comes to at the sweep's size. With no trace it
+  says `not counted`. In `--json` the `try` object gains `model_calls` and `tokens`. Nothing is
+  stored, and no line turns tokens into dollars: Prove carries no price list.
 
 ### Changed
+
+- The plan no longer prints `$0 (local)`. A sweep on this machine says your agent's own calls are
+  not priced, and Modal's and the cloud's lines say the same beside their compute estimate.
+  Declare what a rollout costs under `[cost]` in the sweep spec (`usd_per_rollout`, with an
+  optional `basis`) and the plan multiplies it out, the rate printed as you wrote it;
+  `usd_per_rollout = 0` says the agent costs nothing, which the example and the demo now declare,
+  so their plans still read `$0`. In `--json` the plan gains a `cost` object (`compute_usd`,
+  `agent_usd_per_rollout`, `agent_usd`, `agent_basis`, `total_usd`, `cap_usd`), and the
+  `sentence` of a plan on this machine changes with its first line. Prove 0.4.0 and earlier
+  refuse a spec that has a `[cost]` table, so a spec `init --example` writes with 0.5.0 needs
+  0.5.0 to read it.
+- `--max-cost` holds everything the plan priced, on every backend: on this machine it is accepted
+  when `[cost]` is declared, and refused when it is not, since there is nothing for it to hold;
+  with `[cost]` on Modal or a cloud account it holds the compute estimate plus your agent's
+  declared calls, and without `[cost]` it holds compute alone, as before, and the plan says
+  `compute only` beside the cap.
+- The setup skill writes your cases as the one axis, and another axis only for what you asked to
+  compare; it lists the others it saw and what each would multiply the rollouts by. Its hand-over
+  says the plan does not price your agent's calls, and which outcomes `diff` leaves out.
+  `init --agent` prints one more line: to compare more than your cases, add it to the prompt in
+  your own words.
+- `diff` and `report` name the outcomes they left out, on the `inferred:` line, when no event was
+  given: the outcomes the runs declare or hold that are neither a failure nor a success.
+  `diff --json` gains `left_out`.
 
 - The setup skill `init --agent` writes now asks before calling your agent once with
   `sweep --try`, hands over as ready or not ready, and gives you the whole loop: the sweep

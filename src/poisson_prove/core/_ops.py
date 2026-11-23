@@ -32,7 +32,7 @@ from typing import Any, Protocol, cast
 
 import pandas as pd
 
-from poisson_prove import _facts, _look, _trial, _where_checks, stats
+from poisson_prove import _cost, _facts, _look, _trial, _where_checks, stats
 from poisson_prove import executor_modal as _modal
 from poisson_prove._compat import (
     RETIRED_STORE_VARIABLE,
@@ -81,6 +81,7 @@ from poisson_prove.diff import (
     declared_events,
     infer_events,
     multi_diff,
+    outcomes_left_out,
 )
 from poisson_prove.executor import (
     DEFAULT_MAX_MDE,
@@ -1298,8 +1299,10 @@ def run(
     named, _ = _split_events(events)
     _require_known_events("report", named, df)
     inferred = named is None
+    left_out: tuple[str, ...] = ()
     if named is None and declared_events(manifest):
         found, non_event = declared_events(manifest), None
+        left_out = outcomes_left_out(found, (manifest,), (df,))
     elif named is None:
         try:
             found, non_event = infer_events(df, df.iloc[0:0])
@@ -1344,6 +1347,7 @@ def run(
         events=tuple(found),
         non_event=non_event,
         inferred=inferred,
+        left_out=left_out,
         horizon=at,
         shares=shares,
         design=design,
@@ -2363,24 +2367,33 @@ def _recorded_max_mde(store: Store, resume_id: str | None) -> float | None:
     return float(recorded) if isinstance(recorded, (int, float)) else None
 
 
-def _cost_phrase(block: str) -> str:
+def _cost_phrase(block: str, as_is: str = "") -> str:
     for line in block.splitlines():
         if line.startswith("Cost: "):
-            return _look.reprint(line[len("Cost: ") :])
+            return _reprinted(line, as_is)[len("Cost: ") :]
     return "no estimate"
 
 
-def _reprinted(line: str) -> str:
-    """A plan line the look's way; an account number is given back as it is."""
-    return line if line.startswith("Account: ") else _look.reprint(line)
+def _reprinted(line: str, as_is: str = "") -> str:
+    """A plan line the look's way; an account number is given back as it is, and so is the
+    agent's part of the ``Cost:`` line, ``as_is``, which ``_cost`` has already spelled: the
+    declared rate and the basis are the person's, printed as the spec writes them."""
+    if line.startswith("Account: "):
+        return line
+    if as_is and line.startswith("Cost: ") and line.endswith(as_is):
+        return _look.reprint(line[: -len(as_is)]) + as_is
+    return _look.reprint(line)
 
 
-def _plan_sentence(p: Any, block: str) -> str:
+def _plan_sentence(p: Any, block: str, as_is: str = "", *, short: str | None = None) -> str:
+    """The plan's first line. On this machine the cost is ``short``, the agent's part in a few
+    words; on Modal and a cloud account it is the ``Cost:`` line whole."""
     spec = p.spec
     return (
         f"{_look.fmt_count(spec.total_rollouts())} rollouts of {spec.target_id}: "
         f"{_look.fmt_count(len(spec.configs))} cells x {_look.fmt_count(spec.replicates)} "
-        f"replicates on {_where_words(p.backend, block)}, {_cost_phrase(block)}"
+        f"replicates on {_where_words(p.backend, block)}, "
+        f"{_cost_phrase(block, as_is) if short is None else short}"
     )
 
 
@@ -2469,8 +2482,18 @@ def _planned(
             "agent's keys must be set here for it"
         )
         backend = "local"
+    if trying and o.get("max_cost") is not None:
+        # The cap holds a sweep's estimate. The trial call is one call of the rollout, so it is
+        # made whatever the cap is, and says so.
+        _notes.append(
+            "--max-cost holds a sweep's estimate; the trial call is one call and is not held to it"
+        )
     if backend == "local" and not elsewhere:
-        stray = [name for name in MODAL_ONLY_FLAGS if o.get(name) is not None]
+        # --max-cost is every backend's flag, not Modal's alone: on this machine it holds the
+        # agent's own calls as [cost] declares them, and is checked once the spec is read.
+        stray = [
+            name for name in MODAL_ONLY_FLAGS if name != "max_cost" and o.get(name) is not None
+        ]
         if stray or image != "image":
             names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
             raise refusal(f"{names} only applies to --backend modal")
@@ -2561,6 +2584,20 @@ def _planned(
                 usage=True,
             )
         spec = dataclasses.replace(spec, replicates=replicates)
+    local_cap: float | None = None
+    if backend == "local" and not trying and o.get("max_cost") is not None:
+        local_cap = float(o["max_cost"])
+        if not local_cap >= 0:
+            raise refusal(
+                f"--max-cost takes an amount in dollars, 0 or more, not {local_cap:g}",
+                [f"{COMMAND} sweep --help"],
+                usage=True,
+            )
+        if spec.cost is None:
+            raise refusal(
+                f"--max-cost has nothing to hold on this machine: {_cost.spec_name(spec)} "
+                f"declares no [cost], so {_cost.CALLS} are not priced"
+            )
     if checked and spec.capture is not None and not _has_module("opentelemetry.sdk"):
         raise refusal(
             '[capture] needs the "agent" extra, which is not installed', [EXTRA_HINTS["agent"]]
@@ -2606,11 +2643,24 @@ def _planned(
     p = dataclasses.replace(
         p, name=name, note=note, produced_by=_produced_by(spec_path, target, backend)
     )
+    # What the plan prices: the backend's compute, and the agent's own calls as [cost] declares
+    # them. ``as_is`` is the agent's part of the Cost: line, which is printed as it was worded
+    # (the declared rate as the spec writes it), where the rest of the block is respelled.
+    compute_usd: float | None
+    cap_usd: float | None
     if backend == "modal":
         assert modal is not None
+        agent = _cost.agent_of(spec, len(p.pairs), modal[1].max_rollouts)
+        compute_usd = _modal.estimate_cost(p, modal[1], modal[0].image)
+        cap_usd = modal[1].max_cost
+        as_is = _cost.remote_tail(agent, compute_usd=compute_usd, cap=cap_usd, cap_shown=False)
         block = _modal.preflight_modal(p, modal[0], modal[1])
     elif backend == "cloud":
         assert cloud_options is not None and ready is not None
+        agent = _cost.agent_of(spec, len(p.pairs), cloud_options.max_rollouts)
+        compute_usd = estimate_cloud_cost(p, cloud_options)
+        cap_usd = cloud_options.max_cost
+        as_is = _cost.remote_tail(agent, compute_usd=compute_usd, cap=cap_usd, cap_shown=True)
         try:
             block = preflight_cloud(p, target, cloud_options, masked=ready.masked)
         except ExecutorError as exc:
@@ -2619,21 +2669,27 @@ def _planned(
             if isinstance(kept, str):
                 shown_plan = Plan(
                     verdict="plan",
-                    sentence=_plan_sentence(p, kept),
+                    sentence=_plan_sentence(p, kept, as_is),
                     payload={},
-                    lines=tuple(_reprinted(line) for line in kept.splitlines()),
+                    lines=tuple(_reprinted(line, as_is) for line in kept.splitlines()),
                 )
             raise refusal(str(exc), getattr(exc, "nexts", ()), plan=shown_plan) from exc
     else:
-        block = preflight(p)
+        agent = _cost.agent_of(spec, len(p.pairs), o.get("max_rollouts"))
+        compute_usd = 0.0  # this machine adds nothing
+        cap_usd = local_cap
+        as_is = _cost.local_line(agent, local_cap)
+        block = preflight(p, max_rollouts=o.get("max_rollouts"), max_cost=local_cap)
     if p.resumed:
         block = block.replace(f"Resuming {p.run_id}:", f'Resuming "{idx.name_of(p.run_id)}":')
-    sentence = _plan_sentence(p, block)
+    sentence = _plan_sentence(
+        p, block, as_is, short=_cost.local_short(agent) if backend == "local" else None
+    )
     lines = (
         _target_line(target, params, backend),
         _outcomes_line(spec),
         *([_missing_line(missing)] if missing else []),
-        *(_reprinted(line) for line in block.splitlines()),
+        *(_reprinted(line, as_is) for line in block.splitlines()),
     )
     payload: dict[str, Any] = {
         "run_id": p.run_id,
@@ -2644,9 +2700,10 @@ def _planned(
             "replicates": spec.replicates,
             "backend": p.backend,
             "target": target,
-            "cost": _cost_phrase(block),
+            "cost": _cost_phrase(block, as_is),
             "lines": list(lines),
         },
+        "cost": _cost.document(agent, compute_usd=compute_usd, cap=cap_usd),
     }
     if cloud_options is not None and ready is not None:
         payload["plan"]["cloud"] = plan_object(
@@ -2722,6 +2779,22 @@ def _planned(
         payload["design_paired"] = paired.record()
     if checked:
         _notes.extend(_setup_notes(spec))
+    if local_cap is not None and _cost.over(agent, local_cap):
+        # The cap holds everything the plan priced, which on this machine is the agent's own
+        # calls as [cost] declares them. Refused before anything runs, the plan kept on screen;
+        # replicates are the gate's, so the other way down is fewer conditions.
+        each = dataclasses.replace(agent, rollouts=spec.replicates)
+        raise refusal(
+            f"this sweep's estimate, {agent.phrase(basis=False)}, is over --max-cost "
+            f"{_look.fmt_dollars(local_cap)}",
+            [
+                join([COMMAND, *set_option(typed, "--max-cost", _cost.smallest_cap(agent))]),
+                # No apostrophe here: a next: line is read as a command line by what copies it.
+                f"sweep fewer conditions: each one is {each.count}, "
+                f"~{_look.fmt_dollars(each.usd)} at the declared rate",
+            ],
+            plan=dataclasses.replace(shown, design_line=design_line, paired_line=paired_line),
+        )
     if backend == "modal":
         assert modal is not None
         try:
@@ -2818,8 +2891,81 @@ def trial_sentence(plan: Plan) -> str:
     )
 
 
-#: The trial's cost line: what it spends is the agent's own, and nothing of Prove's is kept.
+#: The trial's cost line when the spec declares no [cost]: what it spends is the agent's own,
+#: and nothing of Prove's is kept.
 TRY_COST = "your agent's own calls for one case; Prove stores nothing"
+
+
+def trial_cost(plan: Plan) -> str:
+    """The trial's ``cost`` line, by what the spec declares under ``[cost]``: nothing declared,
+    a figure for one rollout, or that a rollout costs nothing."""
+    return _cost.trial_line(_cost.agent_of(plan.inner.spec, 1))
+
+
+def _model_calls(
+    meta: Mapping[str, Any], rollouts: int
+) -> tuple[list[tuple[str, str]], int | None, dict[str, int] | None]:
+    """What the trial can see of the call's model calls: the ``llm`` spans of the trace the
+    rollout returned in ``meta["trace"]``, and the tokens those spans carry. Returns the
+    result's lines, the count (None with no trace Prove can read) and the tokens (None when no
+    ``llm`` span carries any). Nothing is priced here: Prove holds no price of a token."""
+    raw = meta.get("trace")
+    if raw is None:
+        return [("model calls", "not counted: this call returned no trace")], None, None
+    try:
+        spans = Trace.from_dict(raw).spans
+    except (TraceValidationError, TypeError, ValueError, KeyError, AttributeError):
+        # Whatever sits in meta["trace"], the call itself was a good one.
+        line = "not counted: this call returned a trace Prove cannot read"
+        return [("model calls", line)], None, None
+    calls = [span for span in spans if span.kind == "llm"]
+    if not calls:
+        return [("model calls", "none in the trace this call returned")], 0, None
+
+    def count(tokens: Mapping[str, Any], *names: str) -> int | None:
+        for name in names:
+            value = tokens.get(name)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                return value
+        return None
+
+    told, tokens_in, tokens_out = 0, 0, 0
+    for span in calls:
+        held = span.tokens or {}
+        # Prove's own converters write "in" and "out"; a rollout's own spans may say either.
+        got_in, got_out = count(held, "input", "in"), count(held, "output", "out")
+        if got_in is None and got_out is None:
+            continue
+        told += 1
+        tokens_in += got_in or 0
+        tokens_out += got_out or 0
+    n = len(calls)
+    plural = "model call" if n == 1 else "model calls"
+    lines = [
+        (
+            "model calls",
+            f"{_look.fmt_count(n)} in this call (the llm spans of the trace it returned)",
+        )
+    ]
+    tokens: dict[str, int] | None = None
+    if told:
+        tokens = {"input": tokens_in, "output": tokens_out, "calls_with_tokens": told}
+        lines.append(
+            (
+                "tokens",
+                f"{_look.fmt_count(tokens_in)} in, {_look.fmt_count(tokens_out)} out "
+                f"(recorded on {_look.fmt_count(told)} of {_look.fmt_count(n)} {plural})",
+            )
+        )
+    lines.append(
+        (
+            "at a sweep's size",
+            f"{_look.fmt_count(rollouts)} {'rollout' if rollouts == 1 else 'rollouts'} like "
+            f"this one would make about {_look.fmt_count(rollouts * n)} model calls; other "
+            "conditions can differ",
+        )
+    )
+    return lines, n, tokens
 
 
 @_operation
@@ -2904,6 +3050,10 @@ def try_once(
         ("outcome", f"{outcome} ({_outcome_kind(spec, outcome)})"),
         ("t", f"{_look.fmt_num(t)} of {_look.fmt_num(horizon)} {spec.t_unit}"),
     ]
+    counted, model_calls, tokens = _model_calls(
+        meta, _cost.priced_rollouts(len(plan.inner.pairs), o.get("max_rollouts"))
+    )
+    details += counted
     if "case_id" in meta:
         details.append(("case_id", _look.one_line(str(meta["case_id"]))))
     if call.printed:
@@ -2924,6 +3074,8 @@ def try_once(
                 "meta": meta,
                 "seconds": float(call.seconds),
                 "printed": int(call.printed),
+                "model_calls": model_calls,
+                "tokens": tokens,
             }
         },
         next=(_try_command(o, plan.typed_target, again=False),),

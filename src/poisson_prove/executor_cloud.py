@@ -56,7 +56,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from poisson_prove import _cloud_instances, _look, _prices_cloud, _where_checks
+from poisson_prove import _cloud_instances, _cost, _look, _prices_cloud, _where_checks
 from poisson_prove._cloud_record import Record
 from poisson_prove._resolve import split_import_path
 from poisson_prove.executor import (
@@ -485,9 +485,25 @@ def _usd(amount: float) -> str:
 
 
 def _check_cap(
-    ledger: _Ledger, estimate: float, options: CloudOptions, *, exclude: str | None = None
+    ledger: _Ledger,
+    estimate: float,
+    options: CloudOptions,
+    *,
+    exclude: str | None = None,
+    agent: _cost.Agent | None = None,
 ) -> float:
+    """Refuse a sweep whose compute estimate, with the ledger so far, is over the cap; with the
+    agent's calls declared under ``[cost]``, the cap holds them too. Returns the ledger's total,
+    which stays compute only, as the stop does."""
     total = ledger.total(exclude=exclude)
+    if agent is not None and agent.declared and not agent.free:
+        if _cost.over(agent, options.max_cost, compute_usd=total + estimate):
+            raise CloudCostGuard(
+                f"refused before anything starts: estimate {_usd(estimate)} plus "
+                f"{agent.phrase(basis=False)} plus ledger total {_usd(total)} is over the cap "
+                f"{_usd(options.max_cost)} (ledger {ledger.path})"
+            )
+        return total
     if total + estimate > options.max_cost:
         raise CloudCostGuard(
             f"refused before anything starts: estimate {_usd(estimate)} plus ledger total "
@@ -833,6 +849,7 @@ def preflight_cloud(p: Plan, import_path: str, options: CloudOptions, *, masked:
         )
     ledger = _Ledger(options.ledger)
     estimate = estimate_cloud_cost(p, options)
+    agent = _cost.agent_of(spec, len(p.pairs), options.max_rollouts)
     total = ledger.total()
     n = options.nodes
     chaos = spec.chaos
@@ -867,7 +884,8 @@ def preflight_cloud(p: Plan, import_path: str, options: CloudOptions, *, masked:
         "through Burla's relay (the cluster software Prove uses); the store stays on this machine",
         f"Cost: ~{_look.fmt_dollars(estimate)} this run ({source}) · "
         f"ledger {_shown_ledger(options)} {_look.fmt_dollars(total)} so far · "
-        f"stop {_look.fmt_dollars(options.stop_cost)} · cap {_look.fmt_dollars(options.max_cost)}",
+        f"stop {_look.fmt_dollars(options.stop_cost)} · cap {_look.fmt_dollars(options.max_cost)}"
+        + _cost.remote_tail(agent, compute_usd=estimate, cap=options.max_cost, cap_shown=True),
         chaos_line,
     ]
     capture_line = _capture_line(spec.capture)
@@ -877,7 +895,7 @@ def preflight_cloud(p: Plan, import_path: str, options: CloudOptions, *, masked:
         lines.append(f"Resuming {p.run_id}: {p.already_stored} stored, {len(p.pairs)} to run")
     text = "\n".join(lines) + "\n"
     try:
-        _check_cap(ledger, estimate, options)
+        _check_cap(ledger, estimate, options, agent=agent)
     except CloudCostGuard as exc:
         exc.plan = text  # type: ignore[attr-defined]
         raise
@@ -1946,7 +1964,9 @@ def run_cloud(
         raise CloudStartError(line, nexts) from None
     if head.get("alive"):
         raise _foreign(name, head.get("pid"))
-    total = _check_cap(ledger, estimate, options)
+    total = _check_cap(
+        ledger, estimate, options, agent=_cost.agent_of(p.spec, len(p.pairs), options.max_rollouts)
+    )
     bundle = _build_bundle(options.packages)
     if p.produced_by is not None:
         p = dataclasses.replace(
@@ -2098,7 +2118,13 @@ def run_cloud(
                 )
 
                 def cost_check(plan: Plan) -> None:
-                    _check_cap(ledger, estimate, options, exclude=plan.run_id)
+                    _check_cap(
+                        ledger,
+                        estimate,
+                        options,
+                        exclude=plan.run_id,
+                        agent=_cost.agent_of(plan.spec, len(plan.pairs), options.max_rollouts),
+                    )
 
                 with _Heartbeat(record):
                     summary = run_with_mapper(

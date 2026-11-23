@@ -19,12 +19,15 @@ import re
 import tomllib
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from decimal import Decimal
 from itertools import product
 from pathlib import Path
 from typing import Any, Literal
 
 from scipy.stats import qmc
 
+from poisson_prove._names import note_unfit
 from poisson_prove.capture import CaptureSpec
 from poisson_prove.chaos import ChaosSpec
 from poisson_prove.store import InvalidConfig, config_hash
@@ -37,6 +40,7 @@ _TOOL_RELIABILITY_RATES: tuple[float, ...] = (0.0, 0.05, 0.10, 0.20, 0.30)
 _CAPTURE_FIELDS: tuple[str, ...] = ("instrument", "content", "max_observation_bytes", "max_spans")
 _CHAOS_FIELDS: tuple[str, ...] = ("fault", "rate", "steps")
 _DECLARE_FIELDS: tuple[str, ...] = ("steps", "outcomes", "gates", "failures", "successes")
+_COST_FIELDS: tuple[str, ...] = ("usd_per_rollout", "basis")
 #: Every top-level key and table a sweep spec has; ``[[scenarios]]`` entries are configs and
 #: hold any key, and ``[modal]``'s subtables are image sections under any name.
 _TOP_FIELDS: tuple[str, ...] = (
@@ -50,6 +54,7 @@ _TOP_FIELDS: tuple[str, ...] = (
     "capture",
     "chaos",
     "declare",
+    "cost",
     "modal",
     "cloud",
 )
@@ -341,6 +346,72 @@ def _declare_table(table: Any) -> Declaration | None:
         raise SamplerError(f"[declare] {exc}") from exc
 
 
+@dataclass(frozen=True)
+class CostSpec:
+    """The ``[cost]`` table of a sweep file: what one rollout costs at the agent's own providers,
+    in dollars, as the person declares it. Prove multiplies it by the rollouts a sweep will run
+    and says whose figure it is; it measures nothing and holds no price of its own."""
+
+    usd_per_rollout: float
+    #: The figure as the spec writes it, digit for digit, which is how every line prints it.
+    written: str
+    #: One line saying where the figure came from, or None.
+    basis: str | None = None
+
+
+_PLAIN_DECIMAL = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _as_written(value: float, text: str, line: int) -> str:
+    """The figure as the file writes it when that is plain decimals; else the same number spelled
+    out in plain decimals (an exponent, an underscore or an inline table is not printed back)."""
+    rows = text.splitlines()
+    if 1 <= line <= len(rows):
+        found = re.match(r"\s*usd_per_rollout\s*=\s*([^\s#]+)\s*(?:#.*)?$", rows[line - 1])
+        if found and _PLAIN_DECIMAL.fullmatch(found.group(1)):
+            return found.group(1)
+    return format(Decimal(repr(value)), "f")
+
+
+def _cost_table(table: Any, file: Path, text: str) -> CostSpec | None:
+    """The optional ``[cost]`` table of a sweep file, read strictly: ``usd_per_rollout``, a finite
+    number at or above 0 and not a boolean, and an optional ``basis``, one line by ``--note``'s
+    rule. Anything else is refused naming the key. No table means nothing is declared.
+
+    Like ``[declare]`` the table rides the spec and stays out of ``to_dict()``: what a rollout
+    costs is not what makes two sweeps the same sweep, so a spec that gains the table still
+    pairs with the runs made before it, and no manifest records the figure."""
+    if table is None:
+        return None
+    lines = _key_lines(text)
+
+    def refused(key: str, why: str) -> SamplerError:
+        line = _line_of(lines, ("cost", key))
+        return SamplerError(f"{file}, line {line}: [cost] {key} {why}")
+
+    if not isinstance(table, Mapping):
+        raise SamplerError(
+            f"{file}, line {_line_of(lines, ('cost',))}: cost must be a table, [cost]"
+        )
+    if "usd_per_rollout" not in table:
+        raise refused("usd_per_rollout", "is missing: it is what one rollout costs, in dollars")
+    usd = table["usd_per_rollout"]
+    if isinstance(usd, bool) or not isinstance(usd, (int, float)):
+        raise refused("usd_per_rollout", "must be a number of dollars, 0 or more")
+    if not math.isfinite(usd) or usd < 0:
+        raise refused("usd_per_rollout", f"must be a number of dollars, 0 or more, got {usd}")
+    basis = table.get("basis")
+    if basis is not None:
+        if not isinstance(basis, str):
+            raise refused("basis", "must be one line of text saying where the figure came from")
+        why = note_unfit(basis.strip())
+        if why is not None:
+            raise refused("basis", f"cannot be printed back: {why.replace('a note', 'a basis')}")
+        basis = basis.strip()
+    written = _as_written(float(usd), text, _line_of(lines, ("cost", "usd_per_rollout")))
+    return CostSpec(usd_per_rollout=float(usd), written=written, basis=basis)
+
+
 def _dotted(path: str) -> tuple[str, ...]:
     return tuple(m.group(0).strip("\"'") for m in re.finditer(_PART, path))
 
@@ -444,6 +515,7 @@ def _strict(file: Path, text: str, data: Mapping[str, Any]) -> None:
         ("capture", _CAPTURE_FIELDS),
         ("chaos", _CHAOS_FIELDS),
         ("declare", _DECLARE_FIELDS),
+        ("cost", _COST_FIELDS),
         ("cloud", tuple(names(CloudOptions))),
     ):
         table = data.get(name)
@@ -487,6 +559,13 @@ class SweepSpec:
     #: non-declaring arm derive the same seeds and pair under ``diff`` -- the comparison a
     #: declaration is most wanted for. The manifest records it as ``declared``.
     declare: Declaration | None = None
+    #: The ``[cost]`` table, when the sweep file has one: what the person declares a rollout
+    #: costs. It rides the spec and is absent from ``to_dict()``, for ``declare``'s reason, and
+    #: no manifest records it: the figure is the person's, not something a run measured.
+    cost: CostSpec | None = None
+    #: The name of the file the spec was read from, without its folder, so a line that says what
+    #: the file declares can name it; None for a spec built in code.
+    source: str | None = dataclass_field(default=None, compare=False)
 
     @classmethod
     def build(
@@ -625,7 +704,12 @@ class SweepSpec:
             chaos=_chaos_table(data.get("chaos")),
             declare=_declare_table(data.get("declare")),
         )
-        return dataclasses.replace(built, target=None if target is None else target.strip())
+        return dataclasses.replace(
+            built,
+            target=None if target is None else target.strip(),
+            cost=_cost_table(data.get("cost"), file, text),
+            source=file.name,
+        )
 
     def cells(self) -> list[str]:
         return [_hash(cfg) for cfg in self.configs]
