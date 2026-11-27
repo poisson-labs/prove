@@ -82,11 +82,12 @@ mutation itself. [NOTICE](../NOTICE) carries the attribution and its licence.
 ## An example
 
 A stand-in agent asks a stand-in model which tool to call. The model answers in process, through
-`httpx`'s own mock transport, so this runs with no key and no network:
+`httpx`'s own mock transport, so this runs with no key and no network. `"openai<3"` brings
+`httpx`, which openai 3 no longer does:
 
 <!-- docs-check: run -->
 ~~~bash
-pip install "poisson-prove[agent]"
+pip install "poisson-prove[agent]" "openai<3"
 ~~~
 
 <!-- docs-check: file tool_agent.py -->
