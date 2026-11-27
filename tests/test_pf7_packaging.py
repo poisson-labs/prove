@@ -22,7 +22,7 @@ package.
   ``main`` that exists in this tree; ``Source`` is the repository and ``Issues`` its issues page.
 - **k4** Every requirement has a lower bound: the core, every extra, ``dev`` included (the floors
   run resolves ``[dev]`` at its lowest too), and the build backend. An upper bound only on
-  ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.4``. ``botocore[crt]`` has the
+  ``openai`` (``openai<4``), and an exact pin only for ``burla==1.8.4``. ``botocore[crt]`` has the
   floor ``burla``'s own requirement gives it: ``burla`` 1.8.4 requires ``boto3>=1.42.39`` and each
   ``boto3`` requires the ``botocore`` of its own number or later, so 1.42.39 is the lowest
   ``botocore`` that installs beside the pin. (The sign-in the ``crt`` extra is there for, a session
@@ -204,7 +204,7 @@ def _same(reqs: list[Requirement], texts: list[str]) -> bool:
 
 def _agent_holds(reqs: list[Requirement]) -> bool:
     by = {name_of(r): r for r in reqs}
-    return (set(by) == {"openai", "opentelemetry-sdk"} and by["openai"].specifier == SpecifierSet(">=2.20,<3")
+    return (set(by) == {"openai", "opentelemetry-sdk"} and by["openai"].specifier == SpecifierSet(">=2.20,<4")
             and _floor_only(by["opentelemetry-sdk"]))
 
 
@@ -255,7 +255,7 @@ def test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_openai_and_burla
         allowed = {">="} | ({"<"} if name == "openai" else set())
         if operators - allowed:
             problems.append(f"{req}: a bound the requirements do not allow (only a floor, and a ceiling on openai)")
-        if name == "openai" and req.specifier != SpecifierSet(">=2.20,<3"):
+        if name == "openai" and req.specifier != SpecifierSet(">=2.20,<4"):
             problems.append(f"{req}: openai keeps its own floor and ceiling")
     assert problems == [], problems
 

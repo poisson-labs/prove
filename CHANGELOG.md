@@ -59,6 +59,10 @@ All notable changes to Poisson Prove are written here. The format follows
   run is too small says so and offers a new baseline at the size that passes. In `--json`, the
   plan of a sweep paired with nothing carries the paired reading as `design_paired`, beside
   `design_mde` and with the same keys.
+- The `agent` and `all` extras allow openai 3 (`openai>=2.20,<4`). `[chaos]` does not reach an
+  openai 3 client yet: openai 3 sends through `httpx2`, and Prove hooks only `httpx`, so a faulted
+  run on an openai 3 client is not faulted. Install `"openai<3"` beside the `agent` extra to use
+  `[chaos]` (#71).
 
 ### Removed
 
