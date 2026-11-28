@@ -71,6 +71,13 @@ All notable changes to Poisson Prove are written here. The format follows
   install made with `[burla]` now has no cluster software, and the first cloud sweep says to
   install `[cloud]`.
 
+### Fixed
+
+- The terminal app no longer hangs on a store path more than twice as long as the window is wide.
+  The header's span for the store started before the row, and the app sat at full CPU on its first
+  screen; every release since 0.1.0 had it. A store too long for the room the header's title
+  leaves is now cut in the middle with `…`, and the screen below prints it whole.
+
 ## 0.4.0 — 2026-11-16
 
 ### Added
