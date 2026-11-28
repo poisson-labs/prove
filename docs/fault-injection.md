@@ -7,7 +7,10 @@ only where you say. Run the same spec with and without it, paired, and `diff` sa
 how much worse the fault made things.
 
 It needs no package of its own: Prove hooks the `httpx` client your agent's model client is built
-on (the OpenAI client is, and the `agent` extra brings it), and the agent's code is not changed.
+on (the OpenAI client is, up to openai 2), and the agent's code is not changed. openai 3 sends
+through `httpx2` instead, which Prove does not hook yet, so a fault does not reach an openai 3
+client: install `"openai<3"` beside the `agent` extra to use `[chaos]`
+([#71](https://github.com/poisson-labs/prove/issues/71)).
 
 ## Where a fault can land: `position()`
 
@@ -79,11 +82,12 @@ mutation itself. [NOTICE](../NOTICE) carries the attribution and its licence.
 ## An example
 
 A stand-in agent asks a stand-in model which tool to call. The model answers in process, through
-`httpx`'s own mock transport, so this runs with no key and no network:
+`httpx`'s own mock transport, so this runs with no key and no network. `"openai<3"` brings
+`httpx`, which openai 3 no longer does:
 
 <!-- docs-check: run -->
 ~~~bash
-pip install "poisson-prove[agent]"
+pip install "poisson-prove[agent]" "openai<3"
 ~~~
 
 <!-- docs-check: file tool_agent.py -->

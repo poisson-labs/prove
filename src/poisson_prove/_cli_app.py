@@ -809,14 +809,15 @@ class ProveApp(App[int], Screens):
         def put(text: str, spans: list[tuple[int, int, str]]) -> None:
             t = Text(text[:w].ljust(w))
             for a, b, style in spans:
-                t.stylize(style, a, min(b, w))
+                t.stylize(style, max(0, a), min(b, w))
             out.append(t)
             out.append("\n")
 
         tool = "poisson-prove"
+        shown = _cut_middle(self.shown, w - len(tool) - 2)
         put(
-            tool.ljust(w - len(self.shown)) + self.shown,
-            [(0, len(tool), "bold"), (w - len(self.shown), w, "dim")],
+            tool.ljust(w - len(shown)) + shown,
+            [(0, len(tool), "bold"), (w - len(shown), w, "dim")],
         )
         put("─" * w, [(0, w, "dim")])
         body_room = h - 5
@@ -848,7 +849,7 @@ class ProveApp(App[int], Screens):
             for a, b, style in spans or []:
                 style = self._style(style)
                 if style and a < w:
-                    t.stylize(style, a, min(b, w))
+                    t.stylize(style, max(0, a), min(b, w))
             if whole:
                 t.stylize(whole)
             out.append(t)
@@ -857,15 +858,18 @@ class ProveApp(App[int], Screens):
         # the header and its rule
         title = f"poisson-prove · {page.title}"
         subject = f"  {page.subject}" if page.subject else ""
-        room = w - len(self.shown) - 1
+        # A store too long for the room the title leaves is cut in the middle; the body below
+        # prints it whole.
+        shown = _cut_middle(self.shown, w - len(title) - 2)
+        room = w - len(shown) - 1
         left = (title + subject)[:room]
         put(
-            left.ljust(w - len(self.shown)) + self.shown,
+            left.ljust(w - len(shown)) + shown,
             [
                 (0, 13, "bold"),
                 (13, 16, "dim"),
                 (len(title), len(left), "dim"),
-                (w - len(self.shown), w, "dim"),
+                (w - len(shown), w, "dim"),
             ],
         )
         put("─" * w, [(0, w, "dim")])
@@ -955,6 +959,16 @@ class ProveApp(App[int], Screens):
         put(bar, spans)
         out.rstrip()
         return out
+
+
+def _cut_middle(text: str, w: int) -> str:
+    """``text`` when it fits in ``w`` columns, else cut in the middle with ``…`` to ``w``."""
+    if len(text) <= w:
+        return text
+    if w < 2:
+        return "…"[: max(0, w)]
+    head = (w - 1) // 2
+    return text[:head] + "…" + text[len(text) - (w - 1 - head) :]
 
 
 def _key_bar(
